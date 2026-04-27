@@ -54,4 +54,4 @@ jobs:
         env:
           RESOURCE: .nais/nais.yaml
           CLUSTER: dev-gcp
-          IMAGE: ${{ needs.test-build.outputs.image }}
+          IMAGE: ${{ needs.build.outputs.image }}
