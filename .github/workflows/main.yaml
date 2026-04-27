@@ -31,12 +31,15 @@ jobs:
         run: |
           echo Faking a Semantic Version
           echo "version=1.$(date "+%Y%m%d%H%M%S")" >> ${GITHUB_OUTPUT}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # ratchet:docker/setup-qemu-action@v3
       - name: Build & push docker image + SBOM
         uses: nais/docker-build-push@cd5ec5663feb0e05c3fa374d1fb442605b046c6b # ratchet:nais/docker-build-push@main
         id: docker-build-push
         with:
           team: appsec
           pull: true
+          platforms: linux/amd64,linux/arm64
           push_image: ${{ github.ref == 'refs/heads/main' }}
   deploy:
     name: deploy
