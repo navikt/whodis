@@ -1,0 +1,35 @@
+apiVersion: nais.io/v1alpha1
+kind: Application
+metadata:
+  name: whodis
+  namespace: appsec
+  labels:
+    team: appsec
+spec:
+  ingresses:
+    - https://whodis.ansatt.nav.no
+  image: {{image}}
+  port: 8080
+  liveness:
+    initialDelay: 60
+    path: /internal/isalive
+  readiness:
+    initialDelay: 60
+    path: /internal/isready
+  replicas:
+    max: 2
+    min: 2
+  resources:
+    limits:
+      memory: 300Mi
+    requests:
+      cpu: 100m
+      memory: 100Mi
+  observability:
+    logging:
+      destinations:
+        - id: loki
+    autoInstrumentation:
+      enabled: true
+      runtime: sdk
+

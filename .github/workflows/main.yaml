@@ -1,0 +1,57 @@
+name: Build and deploy main
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "*.md"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # for Docker push
+    outputs:
+      image: ${{ steps.docker-push.outputs.image }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6.0.1
+        with:
+          persist-credentials: false
+      - name: set version
+        id: set-version
+        run: |
+          echo Faking a Semantic Version
+          echo "version=1.$(date "+%Y%m%d%H%M%S")" >> ${GITHUB_OUTPUT}
+      - name: Build & push docker image + SBOM
+        uses: nais/docker-build-push@cd5ec5663feb0e05c3fa374d1fb442605b046c6b # ratchet:nais/docker-build-push@main
+        id: docker-build-push
+        with:
+          team: appsec
+          pull: true
+          push_image: ${{ github.ref == 'refs/heads/main' }}
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # for GCP auth
+    needs: build
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # ratchet:actions/checkout@v6.0.1
+        with:
+          persist-credentials: false
+      - uses: nais/deploy/actions/deploy@fa754451577294aae42872a69b888b3470478ec1
+        env:
+          RESOURCE: .nais/nais.yaml
+          CLUSTER: dev-gcp
+          IMAGE: ${{ needs.test-build.outputs.image }}

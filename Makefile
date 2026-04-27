@@ -1,3 +1,3 @@
-whodis:
-	go build -o bin/whodis cmd/whodis/*.go
+build:
+	go build -o bin/whodis cmd/whodis/main.go
 
