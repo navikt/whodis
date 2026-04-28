@@ -3,11 +3,13 @@ FROM cgr.dev/chainguard/go as builder
 WORKDIR /build
 ENV CGO_ENABLED=0
 ENV GOTOOLCHAIN=auto
-COPY ./cmd/whodis/* ./cmd/whodis/
+COPY ./cmd/ ./cmd/
+COPY ./internal/ ./internal/
 COPY ./Makefile .
 COPY ./go.mod .
 COPY ./go.sum .
 RUN make build
+RUN make test
 
 FROM cgr.dev/chainguard/static
 WORKDIR /app

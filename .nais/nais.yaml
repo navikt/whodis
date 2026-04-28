@@ -32,4 +32,6 @@ spec:
     autoInstrumentation:
       enabled: true
       runtime: sdk
+  env:
+    WELL_KNOWN_URI: https://login.microsoftonline.com/nav.no/v2.0/.well-known/openid-configuration
 
