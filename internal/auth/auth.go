@@ -43,7 +43,11 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 	if token == "" {
 		return nil, errors.New("token not found in Authorization header")
 	}
-	parsed, err := jwt.Parse(token, pubKeyProvider.Keyfunc, jwt.WithValidMethods([]string{"RS256"}))
+	parsed, err := jwt.Parse(
+		token,
+		pubKeyProvider.Keyfunc,
+		jwt.WithValidMethods([]string{"RS256"}),
+		jwt.WithAudience("yolo"))
 	if err != nil {
 		return nil, err
 	}
