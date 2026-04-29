@@ -1,4 +1,4 @@
-FROM cgr.dev/chainguard/go as builder
+FROM cgr.dev/chainguard/go AS builder
 
 WORKDIR /build
 ENV CGO_ENABLED=0
