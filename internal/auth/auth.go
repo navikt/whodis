@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/MicahParks/keyfunc/v3"
+	"github.com/bytedance/gopkg/util/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -46,11 +47,12 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 	parsed, err := jwt.Parse(
 		token,
 		pubKeyProvider.Keyfunc,
-		jwt.WithValidMethods([]string{"RS256"}),
-		jwt.WithAudience("yolo"))
+		jwt.WithValidMethods([]string{"RS256"}))
+	aud, err := parsed.Claims.GetAudience()
 	if err != nil {
 		return nil, err
 	}
+	logger.Info("Audience is %v", aud)
 	return parsed, nil
 }
 

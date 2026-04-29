@@ -28,13 +28,16 @@ func getLiveness(c *gin.Context) {
 
 func main() {
 	wellKnownURI := envOrBust("WELL_KNOWN_URI")
-	router := gin.Default()
+	router := gin.New()
+
 	err := router.SetTrustedProxies([]string{})
 	if err != nil {
 		panic(err)
 	}
 
 	unprotectedRoutes := router.Group("/internal")
+	loggerConfig := gin.LoggerConfig{SkipPaths: []string{"/isready", "/isalive"}}
+	unprotectedRoutes.Use(gin.LoggerWithConfig(loggerConfig))
 	unprotectedRoutes.GET("/isalive", getLiveness)
 	unprotectedRoutes.GET("/isready", getLiveness)
 
