@@ -37,6 +37,7 @@ spec:
       enabled: true
     sidecar:
       autoLogin: true
+      enabled: true
   env:
     - name: WELL_KNOWN_URI
       value: https://login.microsoftonline.com/nav.no/v2.0/.well-known/openid-configuration
