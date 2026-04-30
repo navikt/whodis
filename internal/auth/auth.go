@@ -52,7 +52,7 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger.Info("Audience is %v", aud)
+	logger.Infof("Audience is %v", aud)
 	return parsed, nil
 }
 

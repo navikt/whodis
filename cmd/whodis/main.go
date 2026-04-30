@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -29,6 +30,13 @@ func getLiveness(c *gin.Context) {
 func main() {
 	wellKnownURI := envOrBust("WELL_KNOWN_URI")
 	router := gin.New()
+	skip := func(c *gin.Context) bool {
+		return strings.HasPrefix(c.FullPath(), "/internal")
+	}
+	loggerConfig := gin.LoggerConfig{
+		Skip: skip,
+	}
+	router.Use(gin.LoggerWithConfig(loggerConfig))
 
 	err := router.SetTrustedProxies([]string{})
 	if err != nil {
@@ -36,8 +44,6 @@ func main() {
 	}
 
 	unprotectedRoutes := router.Group("/internal")
-	loggerConfig := gin.LoggerConfig{SkipPaths: []string{"/isready", "/isalive"}}
-	unprotectedRoutes.Use(gin.LoggerWithConfig(loggerConfig))
 	unprotectedRoutes.GET("/isalive", getLiveness)
 	unprotectedRoutes.GET("/isready", getLiveness)
 
