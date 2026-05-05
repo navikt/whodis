@@ -2,13 +2,13 @@ package main
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/navikt/whodis/internal/auth"
 	"github.com/navikt/whodis/internal/github"
+	"github.com/navikt/whodis/internal/routes"
 )
 
 func main() {
@@ -22,27 +22,21 @@ func main() {
 	github.Init(ghApiToken)
 
 	router := gin.New()
-	skip := func(c *gin.Context) bool {
-		return strings.HasPrefix(c.FullPath(), "/internal")
-	}
-	loggerConfig := gin.LoggerConfig{
-		Skip: skip,
-	}
-	router.Use(ErrorHandler())
-	router.Use(gin.LoggerWithConfig(loggerConfig))
+	setupLogging(router)
+	router.Use(errorHandler())
 
 	if err = router.SetTrustedProxies([]string{}); err != nil {
 		panic(err)
 	}
 
 	unprotectedRoutes := router.Group("/internal")
-	unprotectedRoutes.GET("/isalive", getLiveness)
-	unprotectedRoutes.GET("/isready", getLiveness)
+	unprotectedRoutes.GET("/isalive", routes.GetLiveness)
+	unprotectedRoutes.GET("/isready", routes.GetLiveness)
 
 	protectedRoutes := router.Group("/")
 	protectedRoutes.Use(auth.AuthnInterceptor())
-	protectedRoutes.GET("/", getRoot)
-	protectedRoutes.GET("/test", getTest)
+	protectedRoutes.GET("/", routes.GetRoot)
+	protectedRoutes.GET("/test", routes.GetTest)
 
 	err = router.Run(":8080")
 	if err != nil {
@@ -58,32 +52,7 @@ func envOrBust(key string) string {
 	return value
 }
 
-func getRoot(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		user = "unknown"
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Hello " + user.(string),
-	})
-}
-
-func getTest(c *gin.Context) {
-	users, err := github.AllUsers("yolobogus")
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"users": users,
-	})
-}
-
-func getLiveness(c *gin.Context) {
-	c.Status(200)
-}
-
-func ErrorHandler() gin.HandlerFunc {
+func errorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
 		fmt.Println(c.Errors)
@@ -91,4 +60,14 @@ func ErrorHandler() gin.HandlerFunc {
 			c.Status(500)
 		}
 	}
+}
+
+func setupLogging(router *gin.Engine) {
+	skip := func(c *gin.Context) bool {
+		return strings.HasPrefix(c.FullPath(), "/internal")
+	}
+	loggerConfig := gin.LoggerConfig{
+		Skip: skip,
+	}
+	router.Use(gin.LoggerWithConfig(loggerConfig))
 }
