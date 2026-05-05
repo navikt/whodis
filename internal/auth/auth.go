@@ -1,16 +1,15 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/MicahParks/keyfunc/v3"
-	"github.com/bytedance/gopkg/util/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/navikt/whodis/internal/httpsupport"
 )
 
 var pubKeyProvider keyfunc.Keyfunc
@@ -30,11 +29,19 @@ func Init(wellKnownURI string) error {
 
 func AuthnInterceptor() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		token, err := authenticateRequest(ctx.GetHeader("Authorization"))
+		authHeader := ctx.GetHeader("Authorization")
+		if authHeader == "" {
+			fmt.Println("----------")
+			_ = ctx.AbortWithError(http.StatusUnauthorized, errors.New("no authorization header found"))
+			return
+		}
+		token, err := authenticateRequest(authHeader)
 		if err != nil {
 			_ = ctx.AbortWithError(http.StatusForbidden, err)
+			return
 		}
-		ctx.Set("token", token)
+
+		ctx.Set("user", userFrom(token))
 		ctx.Next()
 	}
 }
@@ -48,11 +55,14 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 		token,
 		pubKeyProvider.Keyfunc,
 		jwt.WithValidMethods([]string{"RS256"}))
+	if err != nil {
+		return nil, err
+	}
 	aud, err := parsed.Claims.GetAudience()
 	if err != nil {
 		return nil, err
 	}
-	logger.Infof("Audience is %v", aud)
+	fmt.Printf("Audience is %v", aud)
 	return parsed, nil
 }
 
@@ -61,17 +71,7 @@ type WellKnownInfo struct {
 }
 
 func jwksURI(wellKnownURI string) (string, error) {
-	resp, err := http.Get(wellKnownURI)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	wk := WellKnownInfo{}
-	err = json.Unmarshal(body, &wk)
+	wk, err := httpsupport.MakeGetRequest[WellKnownInfo](wellKnownURI)
 	if err != nil {
 		return "", err
 	}
@@ -85,4 +85,13 @@ func extractToken(authHeaderValue string) string {
 	idxOfSplit := len("Bearer ")
 	token := authHeaderValue[idxOfSplit:]
 	return strings.TrimSpace(token)
+}
+
+func userFrom(token *jwt.Token) string {
+	if token == nil {
+		return "unknown"
+	}
+	claims := token.Claims.(jwt.MapClaims)
+	subject := claims["sub"].(string)
+	return subject
 }

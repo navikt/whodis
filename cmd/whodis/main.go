@@ -1,34 +1,26 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/auth"
+	"github.com/navikt/whodis/internal/github"
 )
-
-func getRoot(c *gin.Context) {
-	raw, exists := c.Get("token")
-	user := ""
-	if exists {
-		token := raw.(*jwt.Token)
-		claims := token.Claims.(jwt.MapClaims)
-		user = claims["sub"].(string)
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Hello " + user,
-	})
-}
-
-func getLiveness(c *gin.Context) {
-	c.Status(200)
-}
 
 func main() {
 	wellKnownURI := envOrBust("WELL_KNOWN_URI")
+	err := auth.Init(wellKnownURI)
+	if err != nil {
+		panic(err)
+	}
+
+	ghApiToken := envOrBust("GITHUB_API_TOKEN")
+	github.Init(ghApiToken)
+
 	router := gin.New()
 	skip := func(c *gin.Context) bool {
 		return strings.HasPrefix(c.FullPath(), "/internal")
@@ -36,10 +28,10 @@ func main() {
 	loggerConfig := gin.LoggerConfig{
 		Skip: skip,
 	}
+	router.Use(ErrorHandler())
 	router.Use(gin.LoggerWithConfig(loggerConfig))
 
-	err := router.SetTrustedProxies([]string{})
-	if err != nil {
+	if err = router.SetTrustedProxies([]string{}); err != nil {
 		panic(err)
 	}
 
@@ -48,12 +40,9 @@ func main() {
 	unprotectedRoutes.GET("/isready", getLiveness)
 
 	protectedRoutes := router.Group("/")
-	err = auth.Init(wellKnownURI)
-	if err != nil {
-		panic(err)
-	}
 	protectedRoutes.Use(auth.AuthnInterceptor())
 	protectedRoutes.GET("/", getRoot)
+	protectedRoutes.GET("/test", getTest)
 
 	err = router.Run(":8080")
 	if err != nil {
@@ -67,4 +56,39 @@ func envOrBust(key string) string {
 		panic("unable not find environment variable " + key)
 	}
 	return value
+}
+
+func getRoot(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		user = "unknown"
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Hello " + user.(string),
+	})
+}
+
+func getTest(c *gin.Context) {
+	users, err := github.AllUsers("yolobogus")
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"users": users,
+	})
+}
+
+func getLiveness(c *gin.Context) {
+	c.Status(200)
+}
+
+func ErrorHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		fmt.Println(c.Errors)
+		if len(c.Errors) > 0 {
+			c.Status(500)
+		}
+	}
 }
