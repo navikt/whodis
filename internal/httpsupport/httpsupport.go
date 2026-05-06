@@ -28,10 +28,10 @@ func MakeGetRequest[T any](uri string) (*T, error) {
 	return response, nil
 }
 
-func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, error) {
+func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, error) {
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(reqBody))
 	if err != nil {
-		return new(T), err
+		return nil, err
 	}
 	req.Header = http.Header{
 		"Content-Type":  []string{"application/json"},
@@ -40,10 +40,18 @@ func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, er
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return new(T), err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	resBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return resBody, nil
+}
+
+func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, error) {
+	resBody, err := MakePostRequest(uri, authToken, reqBody)
 	if err != nil {
 		return new(T), err
 	}

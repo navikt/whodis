@@ -18,7 +18,7 @@ func GetRoot(c *gin.Context) {
 }
 
 func GetTest(c *gin.Context) {
-	users, err := github.AllUsers("yolobogus")
+	users, err := github.AllUsers()
 	if err != nil {
 		_ = c.Error(err)
 		return

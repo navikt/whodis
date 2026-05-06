@@ -4,23 +4,35 @@ import (
 	"maps"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
 )
 
-var authToken string
+var pkPEM string
+var clientId string
+var installId string
 
-func Init(apiToken string) {
-	authToken = apiToken
+var githubApiBaseURI = "https://api.github.com"
+
+func Init(ghAppPrivateKeyPem, ghAppClientId, installationId string) {
+	pkPEM = ghAppPrivateKeyPem
+	clientId = ghAppClientId
+	installId = installationId
 }
 
-func AllUsers(authToken string) (map[string]string, error) {
+func AllUsers() (map[string]string, error) {
+	installationToken, err := retrieveAuthToken()
+	if err != nil {
+		return nil, err
+	}
 	m := make(map[string]string)
 	keepGoing := true
 	prPage := 100
 	endCursor := ""
 	for keepGoing {
-		page, err := queryForUsersPage(authToken, prPage, endCursor)
+		page, err := queryForUsersPage(installationToken, prPage, endCursor)
 		if err != nil {
 			return nil, err
 		}
@@ -37,7 +49,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
 	reqBody := []byte(`{ "query": "` + query + ` }"`)
-	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse]("https://api.github.com/graphql", authToken, reqBody)
+	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
 		return new(SamlUsersResponse), err
 	}
@@ -105,4 +117,34 @@ func (resp *SamlUsersResponse) AsMap() map[string]string {
 		m[key] = edge.Node.SamlIdentity.Emails[0].Value
 	}
 	return m
+}
+
+func createExchangeToken() (string, error) {
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(pkPEM))
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iat": now.Unix(),
+		"exp": now.Add(time.Second * 30).Unix(),
+		"iss": clientId,
+	})
+	serialized, err := token.SignedString(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return serialized, nil
+}
+
+func retrieveAuthToken() (string, error) {
+	exchangeToken, err := createExchangeToken()
+	if err != nil {
+		return "", err
+	}
+	installationToken, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
+	if err != nil {
+		return "", err
+	}
+	return string(installationToken), nil
 }

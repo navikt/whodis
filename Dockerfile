@@ -5,6 +5,7 @@ ENV CGO_ENABLED=0
 ENV GOTOOLCHAIN=auto
 COPY ./cmd/ ./cmd/
 COPY ./internal/ ./internal/
+COPY ./testfiles/ ./testfiles/
 COPY ./Makefile .
 COPY ./go.mod .
 COPY ./go.sum .

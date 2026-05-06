@@ -18,8 +18,10 @@ func main() {
 		panic(err)
 	}
 
-	ghApiToken := envOrBust("GITHUB_API_TOKEN")
-	github.Init(ghApiToken)
+	ghAppPrivateKey := envOrBust("GITHUB_APP_PRIVATE_KEY")
+	ghAppClientId := envOrBust("GITHUB_APP_CLIENT_ID")
+	ghAppInstallationId := envOrBust("GITHUB_APP_INSTALLATION_ID")
+	github.Init(ghAppPrivateKey, ghAppClientId, ghAppInstallationId)
 
 	router := gin.New()
 	setupLogging(router)
