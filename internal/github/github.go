@@ -29,7 +29,6 @@ func AllUsers() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(installationToken) //for debugging, it's only valid for a few seconds
 	m := make(map[string]string)
 	keepGoing := true
 	prPage := 100
@@ -52,6 +51,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
 	reqBody := []byte(`{ "query": "` + query + ` }"`)
+	fmt.Println(reqBody)
 	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
 		return new(SamlUsersResponse), err
