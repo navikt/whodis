@@ -35,6 +35,7 @@ func AllUsers() (map[string]string, error) {
 	endCursor := ""
 	for keepGoing {
 		page, err := queryForUsersPage(installationToken, prPage, endCursor)
+		fmt.Println(page)
 		if err != nil {
 			return nil, err
 		}
