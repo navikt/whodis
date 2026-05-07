@@ -50,7 +50,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
-	reqBody := []byte(`{ "query": "` + query + ` }", "variables": {}`)
+	reqBody := []byte(`{ "query": " ` + query + ` " }`)
 	fmt.Println(string(reqBody))
 	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
@@ -59,31 +59,30 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	return users, nil
 }
 
-var samlUsersQuery = `
-query { 
-  organization(login: \"navikt\") { 
-    samlIdentityProvider { 
-      externalIdentities(first: $FIRST, after: \"$AFTER\") { 
-        pageInfo { 
+var samlUsersQuery = `query {
+  organization(login: \"navikt\") {
+    samlIdentityProvider {
+      externalIdentities(first: 2, after: \"\") {
+        pageInfo {
           hasNextPage
           endCursor
         }
-        edges { 
-          node { 
-            samlIdentity { 
-              emails { 
-                value 
-              } 
-            } 
-            user { 
-              login 
-            } 
-          } 
-        } 
-      } 
-    } 
-  } 
-}
+        edges {
+          node {
+            samlIdentity {
+              emails {
+                value
+              }
+            }
+            user {
+              login
+            }
+          }
+        }
+      }
+    }
+  }
+} 
 `
 
 type SamlUsersResponse struct {
