@@ -50,7 +50,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
-	reqBody := []byte(`{ "query": "` + query + ` }"`)
+	reqBody := []byte(`{ "query": "` + query + ` }", "variables": {}`)
 	fmt.Println(string(reqBody))
 	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
