@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -57,7 +56,6 @@ func envOrBust(key string) string {
 func errorHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Next()
-		fmt.Println(c.Errors)
 		if len(c.Errors) > 0 {
 			c.Status(500)
 		}

@@ -37,6 +37,7 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 		"User-Agent":    {"Your friendly Nav Bot"},
 	}
 	resp, err := client.Do(req)
+	fmt.Println(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -48,6 +49,7 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(string(resBody))
 	return resBody, nil
 }
 
