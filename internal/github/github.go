@@ -1,6 +1,7 @@
 package github
 
 import (
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ func AllUsers() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(installationToken) //for debugging, it's only valid for a few seconds
 	m := make(map[string]string)
 	keepGoing := true
 	prPage := 100

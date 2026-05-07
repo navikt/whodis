@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,6 +20,7 @@ func Init(wellKnownURI string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("Loaded public key from " + jwksURI)
 	kf, err := keyfunc.NewDefault([]string{jwksURI})
 	if err != nil {
 		return err
@@ -31,7 +33,6 @@ func AuthnInterceptor() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		authHeader := ctx.GetHeader("Authorization")
 		if authHeader == "" {
-			fmt.Println("----------")
 			_ = ctx.AbortWithError(http.StatusUnauthorized, errors.New("no authorization header found"))
 			return
 		}
@@ -71,11 +72,15 @@ type WellKnownInfo struct {
 }
 
 func jwksURI(wellKnownURI string) (string, error) {
-	wk, err := httpsupport.MakeGetRequest[WellKnownInfo](wellKnownURI)
+	responseBody, err := httpsupport.MakeGetRequest(wellKnownURI)
 	if err != nil {
 		return "", err
 	}
-	return wk.JwksUri, nil
+	var info WellKnownInfo
+	if err := json.Unmarshal(responseBody, &info); err != nil {
+		return "", err
+	}
+	return info.JwksUri, nil
 }
 
 func extractToken(authHeaderValue string) string {

@@ -10,22 +10,20 @@ import (
 
 var client = http.Client{}
 
-func MakeGetRequest[T any](uri string) (*T, error) {
+func MakeGetRequest(uri string) ([]byte, error) {
 	resp, err := http.Get(uri)
 	if err != nil {
-		return new(T), err
+		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("expected 200 from %s, got %s, ", uri, resp.Status)
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return new(T), err
+		return nil, err
 	}
-	response := new(T)
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		return new(T), err
-	}
-	return response, nil
+	return body, nil
 }
 
 func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, error) {
@@ -43,6 +41,9 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("expected 200 from %s, got %s, ", uri, resp.Status)
+	}
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
