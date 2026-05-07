@@ -51,7 +51,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
 	reqBody := []byte(`{ "query": "` + query + ` }"`)
-	fmt.Println(reqBody)
+	fmt.Println(string(reqBody))
 	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
 		return new(SamlUsersResponse), err
@@ -61,9 +61,9 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 
 var samlUsersQuery = `
 query { 
-  organization(login: "navikt") { 
+  organization(login: \"navikt\") { 
     samlIdentityProvider { 
-      externalIdentities(first: $FIRST, after: "$AFTER") { 
+      externalIdentities(first: $FIRST, after: \"$AFTER\") { 
         pageInfo { 
           hasNextPage
           endCursor
