@@ -42,7 +42,7 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return nil, fmt.Errorf("expected 200 from %s, got %s, ", uri, resp.Status)
+		return nil, fmt.Errorf("expected a 200-series status from %s, got %s, ", uri, resp.Status)
 	}
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {

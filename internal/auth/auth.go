@@ -63,7 +63,7 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Audience is %v", aud)
+	fmt.Printf("Audience is %v\n", aud)
 	return parsed, nil
 }
 

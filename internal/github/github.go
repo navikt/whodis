@@ -1,6 +1,7 @@
 package github
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"strconv"
@@ -112,6 +113,10 @@ type SamlUsersResponse struct {
 	} `json:"data"`
 }
 
+type TokenExchangeResult struct {
+	Token string `json:"token"`
+}
+
 func (resp *SamlUsersResponse) AsMap() map[string]string {
 	m := make(map[string]string)
 	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
@@ -144,9 +149,13 @@ func retrieveAuthToken() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	installationToken, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
+	responseBody, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
 	if err != nil {
 		return "", err
 	}
-	return string(installationToken), nil
+	var tokenExchangeResult TokenExchangeResult
+	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
+		return "", err
+	}
+	return tokenExchangeResult.Token, nil
 }
