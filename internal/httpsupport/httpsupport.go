@@ -78,5 +78,5 @@ func isError(responseBody []byte) bool {
 	if err := json.Unmarshal(responseBody, &rawResponse); err != nil {
 		return true
 	}
-	return rawResponse.Status != "" && rawResponse.Status != "200"
+	return rawResponse.Status != "200" || rawResponse.Message != ""
 }
