@@ -39,7 +39,6 @@ func AllUsers() (map[string]string, error) {
 			return nil, err
 		}
 		maps.Copy(m, page.AsMap())
-		fmt.Println("more pages? ", page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
 		keepGoing = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
@@ -53,18 +52,18 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
 	reqBody := []byte(`{ "query": " ` + query + ` " }`)
-	users, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
+	page, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
 		return new(SamlUsersResponse), err
 	}
-	fmt.Printf(", more pages exist: %v\n", users.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
-	return users, nil
+	fmt.Printf(", more pages exist: %v\n", page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
+	return page, nil
 }
 
 var samlUsersQuery = `query {
   organization(login: \"navikt\") {
     samlIdentityProvider {
-      externalIdentities(first: 2, after: \"\") {
+      externalIdentities(first: $FIRST, after: \"$AFTER\") {
         pageInfo {
           hasNextPage
           endCursor
@@ -127,6 +126,22 @@ func (resp *SamlUsersResponse) AsMap() map[string]string {
 	return m
 }
 
+func retrieveAuthToken() (string, error) {
+	exchangeToken, err := createExchangeToken()
+	if err != nil {
+		return "", err
+	}
+	responseBody, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
+	if err != nil {
+		return "", err
+	}
+	var tokenExchangeResult TokenExchangeResult
+	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
+		return "", err
+	}
+	return tokenExchangeResult.Token, nil
+}
+
 func createExchangeToken() (string, error) {
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(pkPEM))
 	if err != nil {
@@ -143,20 +158,4 @@ func createExchangeToken() (string, error) {
 		return "", err
 	}
 	return serialized, nil
-}
-
-func retrieveAuthToken() (string, error) {
-	exchangeToken, err := createExchangeToken()
-	if err != nil {
-		return "", err
-	}
-	responseBody, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
-	if err != nil {
-		return "", err
-	}
-	var tokenExchangeResult TokenExchangeResult
-	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
-		return "", err
-	}
-	return tokenExchangeResult.Token, nil
 }
