@@ -56,6 +56,7 @@ func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, er
 	if err != nil {
 		return new(T), err
 	}
+	fmt.Println(string(resBody))
 	if isError(resBody) {
 		return new(T), fmt.Errorf("error making GraphQL request: %s", resBody)
 	}
