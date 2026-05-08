@@ -56,7 +56,6 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	if err != nil {
 		return new(SamlUsersResponse), err
 	}
-	fmt.Printf(", more pages exist: %v\n", page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
 	return page, nil
 }
 
