@@ -37,7 +37,6 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 		"User-Agent":    {"Your friendly Nav Bot"},
 	}
 	resp, err := client.Do(req)
-	fmt.Println(resp)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +48,6 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(resBody))
 	return resBody, nil
 }
 
@@ -69,8 +67,7 @@ func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, er
 }
 
 type ErrorResponse struct {
-	Message string
-	Status  string
+	Errors []struct{} `json:"errors"`
 }
 
 func isError(responseBody []byte) bool {
@@ -78,5 +75,5 @@ func isError(responseBody []byte) bool {
 	if err := json.Unmarshal(responseBody, &rawResponse); err != nil {
 		return true
 	}
-	return rawResponse.Status != "200" || rawResponse.Message != ""
+	return rawResponse.Errors != nil && len(rawResponse.Errors) > 0
 }
