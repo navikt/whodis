@@ -39,6 +39,7 @@ func AllUsers() (map[string]string, error) {
 			return nil, err
 		}
 		maps.Copy(m, page.AsMap())
+		fmt.Println("more pages? ", page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
 		keepGoing = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
@@ -47,7 +48,7 @@ func AllUsers() (map[string]string, error) {
 }
 
 func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUsersResponse, error) {
-	fmt.Println("Querying for users page")
+	fmt.Printf("Querying for users page: %s", endCursor)
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
@@ -56,6 +57,7 @@ func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUse
 	if err != nil {
 		return new(SamlUsersResponse), err
 	}
+	fmt.Printf(", more pages exist: %v\n", users.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage)
 	return users, nil
 }
 
