@@ -120,7 +120,7 @@ type TokenExchangeResult struct {
 func (resp *SamlUsersResponse) AsMap() map[string]string {
 	m := make(map[string]string)
 	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
-		if edge.Node.User.Login == "" {
+		if edge.Node.User.Login == "" || len(edge.Node.SamlIdentity.Emails) == 0 {
 			fmt.Printf("Bogus node from GitHub: username '%s' -> emails %v\n", edge.Node.User.Login, edge.Node.SamlIdentity.Emails)
 			continue
 		}
