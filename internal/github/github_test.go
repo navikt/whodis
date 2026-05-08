@@ -10,7 +10,7 @@ import (
 
 func TestSamlUsersResponseParsing(t *testing.T) {
 	var response SamlUsersResponse
-	_ = json.Unmarshal([]byte(samlUsersResponse), &response)
+	_ = json.Unmarshal([]byte(samlUsersResponseWithNulls), &response)
 	expected := map[string]string{
 		"ukjent":     "Ukjent.Person@nav.no",
 		"utvikleren": "En.Utvikler@nav.no",
@@ -32,7 +32,7 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 	}
 }
 
-var samlUsersResponse = `{
+var samlUsersResponseWithNulls = `{
   "data": {
     "organization": {
       "samlIdentityProvider": {
@@ -69,7 +69,14 @@ var samlUsersResponse = `{
                   "login": "utvikleren"
                 }
               }
-            }
+            },
+			{
+				"node":
+					{"samlIdentity":{
+						"emails":[]},
+						"user":null
+				}
+			}
           ]
         }
       }
