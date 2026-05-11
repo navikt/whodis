@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/routes"
 )
+
+var port = 8080
 
 func main() {
 	wellKnownURI := envOrBust("WELL_KNOWN_URI")
@@ -20,7 +23,10 @@ func main() {
 	ghAppPrivateKey := envOrBust("GITHUB_APP_PRIVATE_KEY")
 	ghAppClientId := envOrBust("GITHUB_APP_CLIENT_ID")
 	ghAppInstallationId := envOrBust("GITHUB_APP_INSTALLATION_ID")
-	github.Init(ghAppPrivateKey, ghAppClientId, ghAppInstallationId)
+	err = github.Init(ghAppPrivateKey, ghAppClientId, ghAppInstallationId)
+	if err != nil {
+		panic(err)
+	}
 
 	router := gin.New()
 	setupLogging(router)
@@ -32,14 +38,15 @@ func main() {
 
 	unprotectedRoutes := router.Group("/internal")
 	unprotectedRoutes.GET("/isalive", routes.GetLiveness)
-	unprotectedRoutes.GET("/isready", routes.GetLiveness)
+	unprotectedRoutes.GET("/isready", routes.GetReadyness)
 
 	protectedRoutes := router.Group("/")
 	protectedRoutes.Use(auth.AuthnInterceptor())
 	protectedRoutes.GET("/", routes.GetRoot)
-	protectedRoutes.GET("/test", routes.GetTest)
+	protectedRoutes.GET("/email/:githubUser", routes.GetTest)
 
 	err = router.Run(":8080")
+	fmt.Printf("Ready and listening at port %d\n", port)
 	if err != nil {
 		panic(err)
 	}

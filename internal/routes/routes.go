@@ -18,16 +18,23 @@ func GetRoot(c *gin.Context) {
 }
 
 func GetTest(c *gin.Context) {
-	users, err := github.AllUsers()
-	if err != nil {
-		_ = c.Error(err)
-		return
+	ghUser := c.Param("githubUser")
+	email := github.EmailFor(ghUser)
+	if email != "" {
+		c.JSON(http.StatusOK, gin.H{ghUser: email})
+	} else {
+		c.Status(404)
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"users": users,
-	})
 }
 
 func GetLiveness(c *gin.Context) {
 	c.Status(200)
+}
+
+func GetReadyness(c *gin.Context) {
+	if github.UsersAreLoaded() {
+		c.Status(200)
+	} else {
+		c.Status(412)
+	}
 }

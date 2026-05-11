@@ -18,13 +18,31 @@ var installId string
 
 var githubApiBaseURI = "https://api.github.com"
 
-func Init(ghAppPrivateKeyPem, ghAppClientId, installationId string) {
+var allUsers map[string]string
+
+func Init(ghAppPrivateKeyPem, ghAppClientId, installationId string) error {
 	pkPEM = ghAppPrivateKeyPem
 	clientId = ghAppClientId
 	installId = installationId
+	go func() {
+		users, err := loadAllUsers()
+		if err != nil {
+			fmt.Printf("Error loading all users: %v\n", err)
+		}
+		allUsers = users
+	}()
+	return nil
 }
 
-func AllUsers() (map[string]string, error) {
+func EmailFor(gitHubUser string) string {
+	return allUsers[gitHubUser]
+}
+
+func UsersAreLoaded() bool {
+	return allUsers != nil && len(allUsers) > 0
+}
+
+func loadAllUsers() (map[string]string, error) {
 	installationToken, err := retrieveAuthToken()
 	if err != nil {
 		return nil, err
@@ -43,11 +61,12 @@ func AllUsers() (map[string]string, error) {
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
 
+	fmt.Printf("Loaded %d users from GitHub\n", len(m))
 	return m, nil
 }
 
 func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUsersResponse, error) {
-	fmt.Printf("Querying for users page: %s", endCursor)
+	fmt.Printf("Querying for users page: %s\n", endCursor)
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
