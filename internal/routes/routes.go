@@ -1,40 +1,41 @@
 package routes
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/navikt/whodis/internal/github"
 )
 
-func GetRoot(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
-		user = "unknown"
+func GetRoot(w http.ResponseWriter, _ *http.Request) {
+	_, err := w.Write([]byte("whodis?"))
+	if err != nil {
+		fmt.Printf("Error writing response: %v", err)
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Hello " + user.(string),
-	})
 }
 
-func GetTest(c *gin.Context) {
-	ghUser := c.Param("githubUser")
+func GetTest(w http.ResponseWriter, r *http.Request) {
+	ghUser := r.PathValue("githubUser")
 	email := github.EmailFor(ghUser)
 	if email != "" {
-		c.JSON(http.StatusOK, gin.H{ghUser: email})
+		err := json.NewEncoder(w).Encode(email)
+		if err != nil {
+			fmt.Printf("Error encoding JSON: %v\n", err)
+		}
 	} else {
-		c.Status(404)
+		http.Error(w, http.StatusText(403), 403)
 	}
 }
 
-func GetLiveness(c *gin.Context) {
-	c.Status(200)
+func GetLiveness(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
 }
 
-func GetReadyness(c *gin.Context) {
+func GetReadyness(w http.ResponseWriter, _ *http.Request) {
 	if github.UsersAreLoaded() {
-		c.Status(200)
+		w.WriteHeader(http.StatusOK)
 	} else {
-		c.Status(412)
+		w.WriteHeader(http.StatusPreconditionFailed)
 	}
 }

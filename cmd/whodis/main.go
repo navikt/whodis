@@ -1,17 +1,17 @@
 package main
 
 import (
-	"fmt"
+	"net/http"
 	"os"
-	"strings"
 
-	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/navikt/whodis/internal/auth"
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/routes"
 )
 
-var port = 8080
+var port = ":8080"
 
 func main() {
 	wellKnownURI := envOrBust("WELL_KNOWN_URI")
@@ -28,26 +28,19 @@ func main() {
 		panic(err)
 	}
 
-	router := gin.New()
-	setupLogging(router)
-	router.Use(errorHandler())
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
 
-	if err = router.SetTrustedProxies([]string{}); err != nil {
-		panic(err)
-	}
+	r.Get("/", routes.GetRoot)
+	r.Get("/internal/isalive", routes.GetLiveness)
+	r.Get("/internal/isready", routes.GetReadyness)
 
-	unprotectedRoutes := router.Group("/internal")
-	unprotectedRoutes.GET("/isalive", routes.GetLiveness)
-	unprotectedRoutes.GET("/isready", routes.GetReadyness)
+	r.Group(func(r chi.Router) {
+		r.Use(auth.JWTMiddleware)
+		r.Get("/email/{githubUser}", routes.GetTest)
+	})
 
-	protectedRoutes := router.Group("/")
-	protectedRoutes.Use(auth.AuthnInterceptor())
-	protectedRoutes.GET("/", routes.GetRoot)
-	protectedRoutes.GET("/email/:githubUser", routes.GetTest)
-
-	err = router.Run(":8080")
-	fmt.Printf("Ready and listening at port %d\n", port)
-	if err != nil {
+	if err := http.ListenAndServe(port, r); err != nil {
 		panic(err)
 	}
 }
@@ -58,23 +51,4 @@ func envOrBust(key string) string {
 		panic("unable not find environment variable " + key)
 	}
 	return value
-}
-
-func errorHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		c.Next()
-		if len(c.Errors) > 0 {
-			c.Status(500)
-		}
-	}
-}
-
-func setupLogging(router *gin.Engine) {
-	skip := func(c *gin.Context) bool {
-		return strings.HasPrefix(c.FullPath(), "/internal")
-	}
-	loggerConfig := gin.LoggerConfig{
-		Skip: skip,
-	}
-	router.Use(gin.LoggerWithConfig(loggerConfig))
 }
