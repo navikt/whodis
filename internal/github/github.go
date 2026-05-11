@@ -24,13 +24,7 @@ func Init(ghAppPrivateKeyPem, ghAppClientId, installationId string) error {
 	pkPEM = ghAppPrivateKeyPem
 	clientId = ghAppClientId
 	installId = installationId
-	go func() {
-		users, err := loadAllUsers()
-		if err != nil {
-			fmt.Printf("Error loading all users: %v\n", err)
-		}
-		allUsers = users
-	}()
+	go syncAllUsersPeriodically()
 	return nil
 }
 
@@ -42,10 +36,18 @@ func UsersAreLoaded() bool {
 	return allUsers != nil && len(allUsers) > 0
 }
 
-func loadAllUsers() (map[string]string, error) {
+func syncAllUsersPeriodically() {
+	loadAllUsers()
+	for range time.Tick(time.Hour * 6) {
+		loadAllUsers()
+	}
+}
+
+func loadAllUsers() {
 	installationToken, err := retrieveAuthToken()
 	if err != nil {
-		return nil, err
+		fmt.Printf("Error loading all users: %v\n", err)
+		return
 	}
 	m := make(map[string]string)
 	keepGoing := true
@@ -54,7 +56,8 @@ func loadAllUsers() (map[string]string, error) {
 	for keepGoing {
 		page, err := queryForUsersPage(installationToken, prPage, endCursor)
 		if err != nil {
-			return nil, err
+			fmt.Printf("Error loading all users: %v\n", err)
+			return
 		}
 		maps.Copy(m, page.AsMap())
 		keepGoing = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.HasNextPage
@@ -62,7 +65,7 @@ func loadAllUsers() (map[string]string, error) {
 	}
 
 	fmt.Printf("Loaded %d users from GitHub\n", len(m))
-	return m, nil
+	allUsers = m
 }
 
 func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUsersResponse, error) {
@@ -137,14 +140,16 @@ type TokenExchangeResult struct {
 
 func (resp *SamlUsersResponse) AsMap() map[string]string {
 	m := make(map[string]string)
+	errorCont := 0
 	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
 		if edge.Node.User.Login == "" || len(edge.Node.SamlIdentity.Emails) == 0 {
-			fmt.Printf("Bogus node from GitHub: username '%s' -> emails %v\n", edge.Node.User.Login, edge.Node.SamlIdentity.Emails)
+			errorCont += 1
 			continue
 		}
 		key := edge.Node.User.Login
 		m[key] = edge.Node.SamlIdentity.Emails[0].Value
 	}
+	fmt.Printf("Got %d users from GitHub with ‰d errors\n", len(m), errorCont)
 	return m
 }
 

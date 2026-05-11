@@ -55,7 +55,8 @@ func authenticateRequest(rawHeader string) (*jwt.Token, error) {
 	parsed, err := jwt.Parse(
 		token,
 		pubKeyProvider.Keyfunc,
-		jwt.WithValidMethods([]string{"RS256"}))
+		jwt.WithValidMethods([]string{"RS256"}),
+		jwt.WithAudience(""))
 	if err != nil {
 		return nil, err
 	}
