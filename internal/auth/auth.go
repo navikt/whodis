@@ -49,7 +49,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-type WellKnownInfo struct {
+type wellKnownInfo struct {
 	JwksUri string `json:"jwks_uri"`
 }
 
@@ -58,7 +58,7 @@ func jwksURI(wellKnownURI string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var info WellKnownInfo
+	var info wellKnownInfo
 	if err := json.Unmarshal(responseBody, &info); err != nil {
 		return "", err
 	}
