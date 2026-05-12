@@ -149,7 +149,7 @@ func (resp *SamlUsersResponse) AsMap() map[string]string {
 		key := edge.Node.User.Login
 		m[key] = edge.Node.SamlIdentity.Emails[0].Value
 	}
-	fmt.Printf("Got %d users from GitHub with ‰d errors\n", len(m), errorCont)
+	fmt.Printf("Got %d users from GitHub with %d errors\n", len(m), errorCont)
 	return m
 }
 
