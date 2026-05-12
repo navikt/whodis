@@ -28,6 +28,10 @@ func GetTest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func GetJkTest(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func GetLiveness(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }

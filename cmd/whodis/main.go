@@ -38,6 +38,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(auth.JWTMiddleware)
 		r.Get("/email/{githubUser}", routes.GetTest)
+		r.Get("/jktest", routes.GetJkTest)
 	})
 
 	if err := http.ListenAndServe(port, r); err != nil {

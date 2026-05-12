@@ -29,19 +29,19 @@ func Init(wellKnownURI string) error {
 
 func JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokenString := r.Header.Get("Authorization")
-		if tokenString == "" {
+		rawHeader := r.Header.Get("Authorization")
+		if rawHeader == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-
+		tokenString := extractToken(rawHeader)
 		parsed, err := jwt.Parse(
 			tokenString,
 			pubKeyProvider.Keyfunc,
 			jwt.WithValidMethods([]string{"RS256"}))
 
 		if err != nil || !parsed.Valid {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
