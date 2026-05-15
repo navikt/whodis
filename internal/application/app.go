@@ -76,9 +76,9 @@ func (a *App) Start(ctx context.Context) error {
 func configFromEnv() (*config, error) {
 	requiredVars := []string{
 		"WELL_KNOWN_URI",
-		"APP_PRIVATE_KEY_PEM",
-		"APP_CLIENT_ID",
-		"APP_INSTALLATION_ID",
+		"GITHUB_APP_PRIVATE_KEY",
+		"GITHUB_APP_CLIENT_ID",
+		"GITHUB_APP_INSTALLATION_ID",
 	}
 	m := map[string]string{}
 
