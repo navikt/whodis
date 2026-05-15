@@ -13,21 +13,25 @@ import (
 
 var pubKeyProvider keyfunc.Keyfunc
 
-func Init(wellKnownURI string) error {
+type Auth struct {
+	pubKeyProvider keyfunc.Keyfunc
+}
+
+func New(wellKnownURI string) (*Auth, error) {
 	jwksURI, err := jwksURI(wellKnownURI)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	fmt.Println("Loaded public key from " + jwksURI)
 	kf, err := keyfunc.NewDefault([]string{jwksURI})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pubKeyProvider = kf
-	return nil
+	return &Auth{pubKeyProvider}, nil
 }
 
-func JWTMiddleware(next http.Handler) http.Handler {
+func (a *Auth) JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rawHeader := r.Header.Get("Authorization")
 		if rawHeader == "" {

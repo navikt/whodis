@@ -12,39 +12,50 @@ import (
 	"github.com/navikt/whodis/internal/httpsupport"
 )
 
-var pkPEM string
-var clientId string
-var installId string
+var apiBaseURI = "https://api.github.com"
 
-var githubApiBaseURI = "https://api.github.com"
+type Client struct {
+	pkPEM     string
+	clientId  string
+	installId string
+	orgUsers  map[string]string
+}
 
-var allUsers map[string]string
+func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
+	c := &Client{
+		pkPEM:     appPrivateKeyPem,
+		clientId:  appClientId,
+		installId: appInstallationId,
+		orgUsers:  make(map[string]string),
+	}
+	go c.syncAllUsersPeriodically()
+	return c
+}
 
-func Init(ghAppPrivateKeyPem, ghAppClientId, installationId string) error {
-	pkPEM = ghAppPrivateKeyPem
-	clientId = ghAppClientId
-	installId = installationId
-	go syncAllUsersPeriodically()
+func (c *Client) Ping() error {
+	if _, err := httpsupport.MakeGetRequest(apiBaseURI); err != nil {
+		return err
+	}
 	return nil
 }
 
-func EmailFor(gitHubUser string) string {
-	return allUsers[gitHubUser]
+func (c *Client) EmailFor(gitHubUser string) string {
+	return c.orgUsers[gitHubUser]
 }
 
-func UsersAreLoaded() bool {
-	return allUsers != nil && len(allUsers) > 0
+func (c *Client) UsersAreLoaded() bool {
+	return len(c.orgUsers) > 0
 }
 
-func syncAllUsersPeriodically() {
-	loadAllUsers()
-	for range time.Tick(time.Hour * 6) {
-		loadAllUsers()
+func (c *Client) syncAllUsersPeriodically() {
+	c.loadOrgUsers()
+	for range time.Tick(time.Hour * 12) {
+		c.loadOrgUsers()
 	}
 }
 
-func loadAllUsers() {
-	installationToken, err := retrieveAuthToken()
+func (c *Client) loadOrgUsers() {
+	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		fmt.Printf("Error loading all users: %v\n", err)
 		return
@@ -54,7 +65,7 @@ func loadAllUsers() {
 	prPage := 100
 	endCursor := ""
 	for keepGoing {
-		page, err := queryForUsersPage(installationToken, prPage, endCursor)
+		page, err := c.queryForUsersPage(installationToken, prPage, endCursor)
 		if err != nil {
 			fmt.Printf("Error loading all users: %v\n", err)
 			return
@@ -65,20 +76,54 @@ func loadAllUsers() {
 	}
 
 	fmt.Printf("Loaded %d users from GitHub\n", len(m))
-	allUsers = m
+	c.orgUsers = m
 }
 
-func queryForUsersPage(authToken string, prPage int, endCursor string) (*SamlUsersResponse, error) {
+func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
 	fmt.Printf("Querying for users page: %s\n", endCursor)
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
 	reqBody := []byte(`{ "query": " ` + query + ` " }`)
-	page, err := httpsupport.MakeGqlRequest[SamlUsersResponse](githubApiBaseURI+"/graphql", authToken, reqBody)
+	page, err := httpsupport.MakeGqlRequest[samlUsersResponse](apiBaseURI+"/graphql", authToken, reqBody)
 	if err != nil {
-		return new(SamlUsersResponse), err
+		return new(samlUsersResponse), err
 	}
 	return page, nil
+}
+
+func (c *Client) retrieveAuthToken() (string, error) {
+	exchangeToken, err := c.createExchangeToken()
+	if err != nil {
+		return "", err
+	}
+	responseBody, err := httpsupport.MakePostRequest(apiBaseURI+"/app/installations/"+c.installId+"/access_tokens", exchangeToken, nil)
+	if err != nil {
+		return "", err
+	}
+	var tokenExchangeResult tokenExchangeResult
+	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
+		return "", err
+	}
+	return tokenExchangeResult.Token, nil
+}
+
+func (c *Client) createExchangeToken() (string, error) {
+	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(c.pkPEM))
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iat": now.Unix(),
+		"exp": now.Add(time.Second * 30).Unix(),
+		"iss": c.clientId,
+	})
+	serialized, err := token.SignedString(privateKey)
+	if err != nil {
+		return "", err
+	}
+	return serialized, nil
 }
 
 var samlUsersQuery = `query {
@@ -107,7 +152,7 @@ var samlUsersQuery = `query {
 } 
 `
 
-type SamlUsersResponse struct {
+type samlUsersResponse struct {
 	Data struct {
 		Organization struct {
 			SamlIdentityProvider struct {
@@ -134,11 +179,11 @@ type SamlUsersResponse struct {
 	} `json:"data"`
 }
 
-type TokenExchangeResult struct {
+type tokenExchangeResult struct {
 	Token string `json:"token"`
 }
 
-func (resp *SamlUsersResponse) AsMap() map[string]string {
+func (resp *samlUsersResponse) AsMap() map[string]string {
 	m := make(map[string]string)
 	errorCont := 0
 	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
@@ -151,38 +196,4 @@ func (resp *SamlUsersResponse) AsMap() map[string]string {
 	}
 	fmt.Printf("Got %d users from GitHub with %d errors\n", len(m), errorCont)
 	return m
-}
-
-func retrieveAuthToken() (string, error) {
-	exchangeToken, err := createExchangeToken()
-	if err != nil {
-		return "", err
-	}
-	responseBody, err := httpsupport.MakePostRequest(githubApiBaseURI+"/app/installations/"+installId+"/access_tokens", exchangeToken, nil)
-	if err != nil {
-		return "", err
-	}
-	var tokenExchangeResult TokenExchangeResult
-	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
-		return "", err
-	}
-	return tokenExchangeResult.Token, nil
-}
-
-func createExchangeToken() (string, error) {
-	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(pkPEM))
-	if err != nil {
-		return "", err
-	}
-	now := time.Now()
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
-		"iat": now.Unix(),
-		"exp": now.Add(time.Second * 30).Unix(),
-		"iss": clientId,
-	})
-	serialized, err := token.SignedString(privateKey)
-	if err != nil {
-		return "", err
-	}
-	return serialized, nil
 }

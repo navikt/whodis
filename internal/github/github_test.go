@@ -9,7 +9,7 @@ import (
 )
 
 func TestSamlUsersResponseParsing(t *testing.T) {
-	var response SamlUsersResponse
+	var response samlUsersResponse
 	_ = json.Unmarshal([]byte(samlUsersResponseWithNulls), &response)
 	expected := map[string]string{
 		"ukjent":     "Ukjent.Person@nav.no",
@@ -25,9 +25,9 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 	wd, _ := os.Getwd()
 	path := filepath.Join(wd, "..", "..", "testfiles", "private_key.pem")
 	data, _ := os.ReadFile(path)
-	Init(string(data), "the_client", "")
-	_, err := createExchangeToken()
-	if err != nil {
+	client := New(string(data), "123", "321")
+	token, err := client.createExchangeToken()
+	if err != nil || token == "" {
 		t.Fatalf("Error creating token: %v", err)
 	}
 }
