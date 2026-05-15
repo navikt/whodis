@@ -91,8 +91,8 @@ func configFromEnv() (*config, error) {
 	}
 	return &config{
 		WellKnownURI:      m["WELL_KNOWN_URI"],
-		AppPrivateKeyPem:  m["APP_PRIVATE_KEY_PEM"],
-		AppClientID:       m["APP_CLIENT_ID"],
-		AppInstallationID: m["APP_INSTALLATION_ID"],
+		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
+		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
+		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
 	}, nil
 }
