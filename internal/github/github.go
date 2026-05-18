@@ -59,8 +59,10 @@ func (c *Client) UsersAreLoaded() bool {
 
 func (c *Client) syncSemiStaticDataPeriodically() {
 	c.loadOrgUsers()
+	c.loadOrgAdmins()
 	for range time.Tick(time.Hour * 12) {
 		c.loadOrgUsers()
+		c.loadOrgAdmins()
 	}
 }
 
@@ -102,6 +104,7 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
+	fmt.Printf("Loaded %d org admins", len(usernames))
 	c.orgAdmins = usernames
 }
 
