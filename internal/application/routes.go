@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
+	"github.com/navikt/whodis/internal/handler"
 )
 
 func (a *App) loadRoutes() {
@@ -17,7 +18,6 @@ func (a *App) loadRoutes() {
 		Level:         slog.LevelInfo,
 		Schema:        httplog.SchemaOTEL,
 		RecoverPanics: true,
-
 		Skip: func(req *http.Request, respStatus int) bool {
 			return req.RequestURI == "/internal/isready" || req.RequestURI == "/internal/isalive"
 		},
@@ -47,10 +47,12 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 }
 
 func (a *App) loadProtectedRoutes(router chi.Router) {
+	repoHandler := handler.Repository{
+		GitHub: *a.ghClient,
+	}
+
 	router.Group(func(r chi.Router) {
 		r.Use(a.auth.JWTMiddleware)
-		r.Get("/yolo", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		})
+		r.Get("/repository/{repoName}", repoHandler.Owners)
 	})
 }

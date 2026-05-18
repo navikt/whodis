@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ type Client struct {
 	clientId  string
 	installId string
 	orgUsers  map[string]string
+	orgAdmins []string
 }
 
 func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
@@ -28,7 +30,7 @@ func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
 		installId: appInstallationId,
 		orgUsers:  make(map[string]string),
 	}
-	go c.syncAllUsersPeriodically()
+	go c.syncSemiStaticDataPeriodically()
 	return c
 }
 
@@ -43,11 +45,19 @@ func (c *Client) EmailFor(gitHubUser string) string {
 	return c.orgUsers[gitHubUser]
 }
 
-func (c *Client) UsersAreLoaded() bool {
-	return len(c.orgUsers) > 0
+func (c *Client) OwnersFor(repoName string) ([]string, error) {
+	allRepoAdmins, err := httpsupport.MakeTypedRequest[[]string](apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin")
+	if err != nil {
+		return nil, err
+	}
+	return c.filterOutOrgAdmins(*allRepoAdmins), nil
 }
 
-func (c *Client) syncAllUsersPeriodically() {
+func (c *Client) UsersAreLoaded() bool {
+	return len(c.orgUsers) > 0 && len(c.orgAdmins) > 0
+}
+
+func (c *Client) syncSemiStaticDataPeriodically() {
 	c.loadOrgUsers()
 	for range time.Tick(time.Hour * 12) {
 		c.loadOrgUsers()
@@ -57,7 +67,7 @@ func (c *Client) syncAllUsersPeriodically() {
 func (c *Client) loadOrgUsers() {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
-		fmt.Printf("Error loading all users: %v\n", err)
+		fmt.Printf("error loading all users: %v\n", err)
 		return
 	}
 	m := make(map[string]string)
@@ -67,7 +77,7 @@ func (c *Client) loadOrgUsers() {
 	for keepGoing {
 		page, err := c.queryForUsersPage(installationToken, prPage, endCursor)
 		if err != nil {
-			fmt.Printf("Error loading all users: %v\n", err)
+			fmt.Printf("error loading all users: %v\n", err)
 			return
 		}
 		maps.Copy(m, page.AsMap())
@@ -77,6 +87,22 @@ func (c *Client) loadOrgUsers() {
 
 	fmt.Printf("Loaded %d users from GitHub\n", len(m))
 	c.orgUsers = m
+}
+
+func (c *Client) loadOrgAdmins() {
+	httpResponse, err := httpsupport.MakeGetRequest(apiBaseURI + "/org/navikt/members?role=admin")
+	if err != nil {
+		fmt.Printf("Error loading org admins: %v\n", err)
+	}
+	var admins []usersResponse
+	if err := json.Unmarshal(httpResponse, &admins); err != nil {
+		fmt.Printf("Error loading org admins: %v\n", err)
+	}
+	var usernames []string
+	for _, user := range admins {
+		usernames = append(usernames, user.Login)
+	}
+	c.orgAdmins = usernames
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
@@ -124,6 +150,16 @@ func (c *Client) createExchangeToken() (string, error) {
 		return "", err
 	}
 	return serialized, nil
+}
+
+func (c *Client) filterOutOrgAdmins(usernames []string) []string {
+	var filtered []string
+	for _, user := range usernames {
+		if !slices.Contains(c.orgAdmins, user) {
+			filtered = append(filtered, user)
+		}
+	}
+	return filtered
 }
 
 var samlUsersQuery = `query {
@@ -196,4 +232,8 @@ func (resp *samlUsersResponse) AsMap() map[string]string {
 	}
 	fmt.Printf("Got %d users from GitHub with %d errors\n", len(m), errorCont)
 	return m
+}
+
+type usersResponse struct {
+	Login string `json:"login"`
 }

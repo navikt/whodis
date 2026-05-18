@@ -32,6 +32,19 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 	}
 }
 
+func TestFilteringOutOrgOwnersFromRepoAdmins(t *testing.T) {
+	client := Client{
+		pkPEM:     "yolo",
+		orgAdmins: []string{"orgadmin1", "orgadmin2"},
+	}
+	repoAdmins := []string{"repoadmin1", "repoadmin2", "orgadmin1", "orgadmin2"}
+	expected := []string{"repoadmin1", "repoadmin2"}
+	actual := client.filterOutOrgAdmins(repoAdmins)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("Org admins should be filtered out: %v", actual)
+	}
+}
+
 var samlUsersResponseWithNulls = `{
   "data": {
     "organization": {

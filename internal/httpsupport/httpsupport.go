@@ -26,6 +26,19 @@ func MakeGetRequest(uri string) ([]byte, error) {
 	return body, nil
 }
 
+func MakeTypedRequest[T any](uri string) (*T, error) {
+	respBody, err := MakeGetRequest(uri)
+	if err != nil {
+		return nil, err
+	}
+	var thing = new(T)
+	err = json.Unmarshal(respBody, thing)
+	if err != nil {
+		return nil, err
+	}
+	return thing, nil
+}
+
 func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, error) {
 	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(reqBody))
 	if err != nil {
