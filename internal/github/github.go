@@ -35,18 +35,31 @@ func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
 }
 
 func (c *Client) Ping() error {
-	if _, err := httpsupport.MakeGetRequest(apiBaseURI); err != nil {
+	if _, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *Client) OwnersFor(repoName string) ([]string, error) {
-	allRepoAdmins, err := httpsupport.MakeTypedRequest[[]string](apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin")
+func (c *Client) AdminsFor(repoName string) ([]string, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin"
+	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		return nil, err
 	}
-	return c.filterOutOrgAdmins(*allRepoAdmins), nil
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
+	if err != nil {
+		return nil, err
+	}
+	var allRepoAdmins []usersResponse
+	if err := json.Unmarshal(respBody, &allRepoAdmins); err != nil {
+		return nil, err
+	}
+	repoAdminLogins := make([]string, len(allRepoAdmins))
+	for _, repoAdmin := range allRepoAdmins {
+		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
+	}
+	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
@@ -88,13 +101,16 @@ func (c *Client) loadOrgUsers() {
 }
 
 func (c *Client) loadOrgAdmins() {
-	httpResponse, err := httpsupport.MakeGetRequest(apiBaseURI + "/orgs/navikt/members?role=admin")
+	installationToken, err := c.retrieveAuthToken()
+	httpResponse, err := httpsupport.MakeAuthenticatedGetRequest(apiBaseURI+"/orgs/navikt/members?role=admin", installationToken)
 	if err != nil {
 		fmt.Printf("Error loading org admins: %v\n", err)
+		return
 	}
 	var admins []usersResponse
 	if err := json.Unmarshal(httpResponse, &admins); err != nil {
 		fmt.Printf("Error loading org admins: %v\n", err)
+		return
 	}
 	var usernames []string
 	for _, user := range admins {

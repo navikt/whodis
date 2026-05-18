@@ -58,7 +58,7 @@ type wellKnownInfo struct {
 }
 
 func jwksURI(wellKnownURI string) (string, error) {
-	responseBody, err := httpsupport.MakeGetRequest(wellKnownURI)
+	responseBody, err := httpsupport.MakeUnauthenticatedGetRequest(wellKnownURI)
 	if err != nil {
 		return "", err
 	}

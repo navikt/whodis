@@ -10,33 +10,30 @@ import (
 
 var client = http.Client{}
 
-func MakeGetRequest(uri string) ([]byte, error) {
+func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
 	resp, err := http.Get(uri)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("expected 200 from %s, got %s, ", uri, resp.Status)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
+	return readResponse(resp)
 }
 
-func MakeTypedRequest[T any](uri string) (*T, error) {
-	respBody, err := MakeGetRequest(uri)
+func MakeAuthenticatedGetRequest(uri, authToken string) ([]byte, error) {
+	req, err := http.NewRequest("GET", uri, nil)
 	if err != nil {
 		return nil, err
 	}
-	var thing = new(T)
-	err = json.Unmarshal(respBody, thing)
+	req.Header = http.Header{
+		"Authorization": []string{"Bearer " + authToken},
+		"User-Agent":    {"Your friendly Nav Bot"},
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	return thing, nil
+	defer resp.Body.Close()
+	return readResponse(resp)
 }
 
 func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, error) {
@@ -89,4 +86,15 @@ func isError(responseBody []byte) bool {
 		return true
 	}
 	return rawResponse.Errors != nil && len(rawResponse.Errors) > 0
+}
+
+func readResponse(resp *http.Response) ([]byte, error) {
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("expected 200 from %s, got %s, ", resp.Request.URL.String(), resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/navikt/whodis/internal/github"
@@ -13,8 +14,9 @@ type Repository struct {
 
 func (repo *Repository) Owners(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
-	owners, err := repo.GitHub.OwnersFor(repoName)
+	owners, err := repo.GitHub.AdminsFor(repoName)
 	if err != nil {
+		fmt.Printf("error getting repo owners: %v\n", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	if err := json.NewEncoder(w).Encode(owners); err != nil {
