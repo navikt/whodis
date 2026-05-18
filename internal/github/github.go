@@ -41,10 +41,6 @@ func (c *Client) Ping() error {
 	return nil
 }
 
-func (c *Client) EmailFor(gitHubUser string) string {
-	return c.orgUsers[gitHubUser]
-}
-
 func (c *Client) OwnersFor(repoName string) ([]string, error) {
 	allRepoAdmins, err := httpsupport.MakeTypedRequest[[]string](apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin")
 	if err != nil {
@@ -53,7 +49,7 @@ func (c *Client) OwnersFor(repoName string) ([]string, error) {
 	return c.filterOutOrgAdmins(*allRepoAdmins), nil
 }
 
-func (c *Client) UsersAreLoaded() bool {
+func (c *Client) SemiStaticDataIsLoaded() bool {
 	return len(c.orgUsers) > 0 && len(c.orgAdmins) > 0
 }
 
@@ -92,7 +88,7 @@ func (c *Client) loadOrgUsers() {
 }
 
 func (c *Client) loadOrgAdmins() {
-	httpResponse, err := httpsupport.MakeGetRequest(apiBaseURI + "/org/navikt/members?role=admin")
+	httpResponse, err := httpsupport.MakeGetRequest(apiBaseURI + "/orgs/navikt/members?role=admin")
 	if err != nil {
 		fmt.Printf("Error loading org admins: %v\n", err)
 	}

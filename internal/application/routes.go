@@ -38,7 +38,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 		w.WriteHeader(http.StatusOK)
 	})
 	router.Get("/isready", func(w http.ResponseWriter, r *http.Request) {
-		if a.ghClient.UsersAreLoaded() {
+		if a.ghClient.SemiStaticDataIsLoaded() {
 			w.WriteHeader(http.StatusOK)
 		} else {
 			w.WriteHeader(http.StatusTeapot)
