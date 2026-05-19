@@ -13,6 +13,7 @@ import (
 func (a *App) loadRoutes() {
 	router := chi.NewRouter()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
+	slog.SetDefault(logger)
 
 	router.Use(httplog.RequestLogger(logger, &httplog.Options{
 		Level:         slog.LevelInfo,

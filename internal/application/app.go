@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -48,7 +49,7 @@ func (a *App) Start(ctx context.Context) error {
 		Handler: a.router,
 	}
 
-	fmt.Println("Starting server")
+	slog.Info("Starting server")
 
 	ch := make(chan error, 1)
 

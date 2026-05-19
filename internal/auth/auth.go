@@ -2,7 +2,7 @@ package auth
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -22,7 +22,7 @@ func New(wellKnownURI string) (*Auth, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("Loaded public key from " + jwksURI)
+	slog.Info("Loaded public key from " + jwksURI)
 	kf, err := keyfunc.NewDefault([]string{jwksURI})
 	if err != nil {
 		return nil, err

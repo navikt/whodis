@@ -2,7 +2,7 @@ package github
 
 import (
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"strconv"
@@ -59,8 +59,8 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
-	fmt.Printf("Repo Admins: %v\n", repoAdminLogins)
-	fmt.Printf("Org Admin Logins: %v\n", c.orgAdmins)
+	slog.Info("Repo Admins:", slog.Any("repoAdminLogins", repoAdminLogins))
+	slog.Info("Org Admin Logins:", slog.Any("orgAdmins", c.orgAdmins))
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
@@ -80,7 +80,7 @@ func (c *Client) syncSemiStaticDataPeriodically() {
 func (c *Client) loadOrgUsers() {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
-		fmt.Printf("error loading all users: %v\n", err)
+		slog.Error("error loading all users", slog.Any("error", err))
 		return
 	}
 	m := make(map[string]string)
@@ -90,7 +90,7 @@ func (c *Client) loadOrgUsers() {
 	for keepGoing {
 		page, err := c.queryForUsersPage(installationToken, prPage, endCursor)
 		if err != nil {
-			fmt.Printf("error loading all users: %v\n", err)
+			slog.Error("error loading all users", slog.Any("error", err))
 			return
 		}
 		maps.Copy(m, page.AsMap())
@@ -99,19 +99,19 @@ func (c *Client) loadOrgUsers() {
 	}
 
 	c.orgUsers = m
-	fmt.Printf("Loaded %d users from GitHub\n", len(c.orgUsers))
+	slog.Info("Loaded users from GitHub", slog.Int("ghUsers", len(c.orgUsers)))
 }
 
 func (c *Client) loadOrgAdmins() {
 	installationToken, err := c.retrieveAuthToken()
 	httpResponse, err := httpsupport.MakeAuthenticatedGetRequest(apiBaseURI+"/orgs/navikt/members?role=admin", installationToken)
 	if err != nil {
-		fmt.Printf("Error loading org admins: %v\n", err)
+		slog.Error("Error loading org admins", slog.Any("error", err))
 		return
 	}
 	var admins []usersResponse
 	if err := json.Unmarshal(httpResponse, &admins); err != nil {
-		fmt.Printf("Error loading org admins: %v\n", err)
+		slog.Error("Error loading org admins", slog.Any("error", err))
 		return
 	}
 	var usernames []string
@@ -119,11 +119,11 @@ func (c *Client) loadOrgAdmins() {
 		usernames = append(usernames, user.Login)
 	}
 	c.orgAdmins = slices.Clone(usernames)
-	fmt.Printf("Loaded %d org admins\n", len(c.orgAdmins))
+	slog.Info("Loaded org admins\n", slog.Int("count", len(c.orgAdmins)))
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
-	fmt.Printf("Querying for users page: %s\n", endCursor)
+	slog.Info("Querying for users page: %s\n", slog.String("endCursor", endCursor))
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	query = strings.Replace(query, "\n", " ", -1)
@@ -247,7 +247,7 @@ func (resp *samlUsersResponse) AsMap() map[string]string {
 		key := edge.Node.User.Login
 		m[key] = edge.Node.SamlIdentity.Emails[0].Value
 	}
-	fmt.Printf("Got %d users from GitHub with %d errors\n", len(m), errorCont)
+	slog.Info("Loaded users from GitHub", slog.Int("count", len(m)))
 	return m
 }
 

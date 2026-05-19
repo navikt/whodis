@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 
@@ -19,6 +19,6 @@ func main() {
 	defer cancel()
 
 	if err := app.Start(ctx); err != nil {
-		fmt.Println("failed to start app:", err)
+		slog.Error("failed to start app:", err)
 	}
 }
