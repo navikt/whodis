@@ -98,8 +98,8 @@ func (c *Client) loadOrgUsers() {
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
 
-	fmt.Printf("Loaded %d users from GitHub\n", len(m))
 	c.orgUsers = m
+	fmt.Printf("Loaded %d users from GitHub\n", len(c.orgUsers))
 }
 
 func (c *Client) loadOrgAdmins() {
