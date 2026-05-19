@@ -118,8 +118,8 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
-	c.orgAdmins = usernames
-	fmt.Printf("Loaded %d org admins\n", len(usernames))
+	c.orgAdmins = slices.Clone(usernames)
+	fmt.Printf("Loaded %d org admins\n", len(c.orgAdmins))
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
