@@ -55,7 +55,7 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	if err := json.Unmarshal(respBody, &allRepoAdmins); err != nil {
 		return nil, err
 	}
-	repoAdminLogins := make([]string, len(allRepoAdmins))
+	var repoAdminLogins []string
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
@@ -116,7 +116,7 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
-	fmt.Printf("Loaded %d org admins", len(usernames))
+	fmt.Printf("Loaded %d org admins\n", len(usernames))
 	c.orgAdmins = usernames
 }
 
@@ -167,11 +167,13 @@ func (c *Client) createExchangeToken() (string, error) {
 	return serialized, nil
 }
 
-func (c *Client) filterOutOrgAdmins(usernames []string) []string {
+func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 	var filtered []string
-	for _, user := range usernames {
-		if !slices.Contains(c.orgAdmins, user) {
-			filtered = append(filtered, user)
+	fmt.Println(c.orgAdmins)
+	for _, repoAdmin := range repoAdmins {
+		fmt.Printf("is %s an org admin?: %v\n", repoAdmin, slices.Contains(c.orgAdmins, repoAdmin))
+		if !slices.Contains(c.orgAdmins, repoAdmin) {
+			filtered = append(filtered, repoAdmin)
 		}
 	}
 	return filtered
