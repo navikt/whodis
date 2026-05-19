@@ -116,8 +116,8 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
-	fmt.Printf("Loaded %d org admins\n", len(usernames))
 	c.orgAdmins = usernames
+	fmt.Printf("Loaded org admins: %v\n", c.orgAdmins)
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
@@ -169,9 +169,7 @@ func (c *Client) createExchangeToken() (string, error) {
 
 func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 	var filtered []string
-	fmt.Println(c.orgAdmins)
 	for _, repoAdmin := range repoAdmins {
-		fmt.Printf("is %s an org admin?: %v\n", repoAdmin, slices.Contains(c.orgAdmins, repoAdmin))
 		if !slices.Contains(c.orgAdmins, repoAdmin) {
 			filtered = append(filtered, repoAdmin)
 		}
