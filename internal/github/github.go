@@ -59,6 +59,8 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
+	fmt.Printf("Repo Admins: %v\n", repoAdminLogins)
+	fmt.Printf("Org Admin Logins: %v\n", c.orgAdmins)
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
@@ -117,7 +119,7 @@ func (c *Client) loadOrgAdmins() {
 		usernames = append(usernames, user.Login)
 	}
 	c.orgAdmins = usernames
-	fmt.Printf("Loaded org admins: %v\n", c.orgAdmins)
+	fmt.Printf("Loaded %d org admins\n", len(usernames))
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
