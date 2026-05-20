@@ -64,8 +64,6 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
-	slog.Info("Repo Admins:", slog.Any("repoAdminLogins", repoAdminLogins))
-	slog.Info("Org Admin Logins:", slog.Any("orgAdmins", c.orgAdmins))
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
