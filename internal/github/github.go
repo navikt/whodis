@@ -119,7 +119,7 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
-	c.orgAdmins = slices.Clone(usernames)
+	c.orgAdmins = usernames
 	slog.Info("Loaded org admins\n", slog.Int("count", len(c.orgAdmins)))
 }
 
