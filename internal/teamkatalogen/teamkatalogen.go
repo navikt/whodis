@@ -6,18 +6,10 @@ import (
 	"github.com/navikt/whodis/internal/httpsupport"
 )
 
-var apibaseURI = "https://teamkatalog-api.intern.nav.no"
-
-type membershipByEmailReply struct {
-	Teams []struct {
-		Name         string `json:"name"`
-		Description  string `json:"description"`
-		SlackChannel string `json:"slackChannel"`
-	}
-}
+var apiBaseURI = "https://teamkatalog-api.intern.nav.no"
 
 func DetailsForUser(email string) (*UserDetails, error) {
-	resp, err := httpsupport.MakeUnauthenticatedGetRequest(apibaseURI + "/member/membership/byUserEmail?email=" + email)
+	resp, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI + "/member/membership/byUserEmail?email=" + email)
 	if err != nil {
 		return nil, err
 	}
