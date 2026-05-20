@@ -25,7 +25,6 @@ type UserDetails struct {
 }
 
 type Team struct {
-	Department   string   `json:"avdelingNavn"`
 	Name         string   `json:"name"`
 	SlackChannel string   `json:"slackChannel"`
 	NaisTeams    []string `json:"naisTeams"`
