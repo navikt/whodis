@@ -49,3 +49,8 @@ spec:
       value: release
   envFrom:
     - secret: whodis
+  accessPolicy:
+    outbound:
+      rules:
+        - application: team-catalog-backend
+          namespace: org

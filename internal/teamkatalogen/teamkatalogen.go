@@ -6,7 +6,7 @@ import (
 	"github.com/navikt/whodis/internal/httpsupport"
 )
 
-var apiBaseURI = "https://teamkatalog-api.intern.nav.no"
+var apiBaseURI = "http://team-catalog-backend.org"
 
 func DetailsForUser(email string) (*UserDetails, error) {
 	resp, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI + "/member/membership/byUserEmail?email=" + email)
