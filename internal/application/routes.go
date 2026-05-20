@@ -49,7 +49,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 
 func (a *App) loadProtectedRoutes(router chi.Router) {
 	repoHandler := handler.Repository{
-		GitHub: *a.ghClient,
+		GitHubClient: a.ghClient,
 	}
 
 	router.Group(func(r chi.Router) {

@@ -42,6 +42,10 @@ func (c *Client) Ping() error {
 	return nil
 }
 
+func (c *Client) EmailFor(username string) string {
+	return c.orgUsers[username]
+}
+
 func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	uri := apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin"
 	installationToken, err := c.retrieveAuthToken()
