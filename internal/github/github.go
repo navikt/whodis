@@ -29,6 +29,7 @@ func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
 		clientId:  appClientId,
 		installId: appInstallationId,
 		orgUsers:  make(map[string]string),
+		orgAdmins: make([]string, 0),
 	}
 	go c.syncSemiStaticDataPeriodically()
 	return c
