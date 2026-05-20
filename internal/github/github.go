@@ -247,7 +247,7 @@ func (resp *samlUsersResponse) AsMap() map[string]string {
 		key := edge.Node.User.Login
 		m[key] = edge.Node.SamlIdentity.Emails[0].Value
 	}
-	slog.Info("Loaded users from GitHub", slog.Int("count", len(m)))
+	slog.Info("Loaded users from GitHub", slog.Int("count", len(m)), slog.Int("errors", errorCont))
 	return m
 }
 
