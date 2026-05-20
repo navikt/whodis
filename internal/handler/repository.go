@@ -16,7 +16,7 @@ func (repo *Repository) Owners(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	owners, err := repo.GitHub.AdminsFor(repoName)
 	if err != nil {
-		slog.Error("error getting repo owners: %v\n", err)
+		slog.Error("error getting repo owners", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 	if err := json.NewEncoder(w).Encode(owners); err != nil {

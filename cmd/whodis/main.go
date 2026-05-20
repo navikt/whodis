@@ -19,6 +19,6 @@ func main() {
 	defer cancel()
 
 	if err := app.Start(ctx); err != nil {
-		slog.Error("failed to start app:", err)
+		slog.Error("failed to start app:", slog.Any("error", err))
 	}
 }
