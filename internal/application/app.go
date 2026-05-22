@@ -85,7 +85,7 @@ func configFromEnv() (*config, error) {
 		"GITHUB_APP_PRIVATE_KEY",
 		"GITHUB_APP_CLIENT_ID",
 		"GITHUB_APP_INSTALLATION_ID",
-		"NAIS_API_KEY",
+		"NAIS_API_TOKEN",
 	}
 	m := map[string]string{}
 
@@ -101,6 +101,6 @@ func configFromEnv() (*config, error) {
 		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
 		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
 		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
-		NaisApiKey:        m["NAIS_API_KEY"],
+		NaisApiKey:        m["NAIS_API_TOKEN"],
 	}, nil
 }
