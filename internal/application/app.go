@@ -10,12 +10,14 @@ import (
 
 	"github.com/navikt/whodis/internal/auth"
 	"github.com/navikt/whodis/internal/github"
+	"github.com/navikt/whodis/internal/nais"
 )
 
 type App struct {
 	router   http.Handler
 	auth     *auth.Auth
 	ghClient *github.Client
+	nais     *nais.Api
 }
 
 type config struct {
@@ -23,6 +25,7 @@ type config struct {
 	AppPrivateKeyPem  string
 	AppClientID       string
 	AppInstallationID string
+	NaisApiKey        string
 }
 
 func New() (*App, error) {
@@ -35,9 +38,11 @@ func New() (*App, error) {
 		return nil, err
 	}
 	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID)
+	naisClient := nais.New(config.NaisApiKey)
 	app := &App{
 		auth:     authn,
 		ghClient: gh,
+		nais:     naisClient,
 	}
 	app.loadRoutes()
 	return app, nil
@@ -80,6 +85,7 @@ func configFromEnv() (*config, error) {
 		"GITHUB_APP_PRIVATE_KEY",
 		"GITHUB_APP_CLIENT_ID",
 		"GITHUB_APP_INSTALLATION_ID",
+		"NAIS_API_KEY",
 	}
 	m := map[string]string{}
 
@@ -95,5 +101,6 @@ func configFromEnv() (*config, error) {
 		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
 		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
 		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
+		NaisApiKey:        m["NAIS_API_KEY"],
 	}, nil
 }

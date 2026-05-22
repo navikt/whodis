@@ -129,9 +129,7 @@ func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor strin
 	slog.Info("Querying for users page: %s\n", slog.String("endCursor", endCursor))
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
-	query = strings.Replace(query, "\n", " ", -1)
-	reqBody := []byte(`{ "query": " ` + query + ` " }`)
-	page, err := httpsupport.MakeGqlRequest[samlUsersResponse](apiBaseURI+"/graphql", authToken, reqBody)
+	page, err := httpsupport.MakeGqlQuery[samlUsersResponse](apiBaseURI+"/graphql", authToken, query)
 	if err != nil {
 		return new(samlUsersResponse), err
 	}

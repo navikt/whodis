@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 var client = http.Client{}
@@ -67,8 +68,10 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	return resBody, nil
 }
 
-func MakeGqlRequest[T any](uri string, authToken string, reqBody []byte) (*T, error) {
-	resBody, err := MakePostRequest(uri, authToken, reqBody)
+func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error) {
+	queryAsSingleLine := strings.Replace(query, "\n", " ", -1)
+	reqBody := `{ "query": " ` + queryAsSingleLine + ` " }`
+	resBody, err := MakePostRequest(uri, authToken, []byte(reqBody))
 	if err != nil {
 		return new(T), err
 	}
