@@ -54,3 +54,5 @@ spec:
       rules:
         - application: team-catalog-backend
           namespace: org
+      external:
+        - host: console.nav.cloud.nais.io
