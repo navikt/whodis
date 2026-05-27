@@ -25,19 +25,19 @@ func (api *Api) DetailsFor(teamSlug string) (string, error) {
 	return *resp, nil
 }
 
-var teamQuery = `query {
+var teamQuery = `query singleTeam {
        team(slug:\"$slug\") {
-          slackChannel
-          members(first:100) {
-          	pageInfo {
-          		totalCount
-          		hasNextPage
-          		endCursor
-			}
+          slug
+          members(first:50) {
+             pageInfo {
+                totalCount
+                hasNextPage
+                endCursor
+             }
              nodes {
                 name
-				email
+                email
              }
           }
        }
-}`
+    }`
