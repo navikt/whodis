@@ -29,6 +29,11 @@ var applicationQuery = `
        team(slug:"$slug") {
           slackChannel
           members(first:100) {
+          	pageInfo {
+          		totalCount
+          		hasNextPage
+          		endCursor
+			}
              nodes {
                 name
 				email
