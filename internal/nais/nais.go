@@ -25,7 +25,7 @@ func (api *Api) DetailsFor(teamSlug string) (string, error) {
 	return *resp, nil
 }
 
-var applicationQuery = `{
+var applicationQuery = `
        team(slug:"$slug") {
           slackChannel
           members(first:100) {
