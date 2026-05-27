@@ -71,6 +71,7 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error) {
 	queryAsSingleLine := strings.Replace(query, "\n", " ", -1)
 	reqBody := `{ "query": " ` + queryAsSingleLine + ` " }`
+	fmt.Println(reqBody)
 	resBody, err := MakePostRequest(uri, authToken, []byte(reqBody))
 	if err != nil {
 		return new(T), err
