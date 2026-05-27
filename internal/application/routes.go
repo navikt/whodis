@@ -51,13 +51,13 @@ func (a *App) loadProtectedRoutes(router chi.Router) {
 	repoHandler := handler.Repository{
 		GitHubClient: a.ghClient,
 	}
-	appHandler := handler.NaisApplication{
+	naisApiHandler := handler.NaisApi{
 		NaisClient: a.nais,
 	}
 
 	router.Group(func(r chi.Router) {
 		r.Use(a.auth.JWTMiddleware)
 		r.Get("/repository/{repoName}", repoHandler.Owners)
-		r.Get("/app/{appName}", appHandler.DetailsFor)
+		r.Get("/nais/{teamSlug}", naisApiHandler.DetailsForTeam)
 	})
 }

@@ -16,8 +16,8 @@ func New(apiKey string) *Api {
 	return &Api{apiKey}
 }
 
-func (api *Api) DetailsFor(appName string) (string, error) {
-	query := strings.Replace(applicationQuery, "$appName", appName, 1)
+func (api *Api) DetailsFor(teamSlug string) (string, error) {
+	query := strings.Replace(applicationQuery, "$slug", teamSlug, 1)
 	resp, err := httpsupport.MakeGqlQuery[string](naisApiBaseUrl, api.apiKey, query)
 	if err != nil {
 		return "", err
@@ -25,16 +25,13 @@ func (api *Api) DetailsFor(appName string) (string, error) {
 	return *resp, nil
 }
 
-var applicationQuery = `query app {
-	application(name: "$appName") {
-    	team {
-			slug
-			slackChannel
-			members(first: 30) {
-				user {
-					email
-				}
-			}
-		}
-	}
-} `
+var applicationQuery = `{
+       team(slug:"$slug") {
+          slackChannel
+          members(first:100) {
+             nodes {
+                name
+				email
+             }
+          }
+       }`
