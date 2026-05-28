@@ -5,17 +5,24 @@ on:
     - cron: '0 8 * * *'
   workflow_dispatch:
 
+permissions: {}
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   automerge:
+    name: automerge-prs
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      checks: read
-      statuses: read
+      contents: write # for merging
+      pull-requests: write # for merging
+      checks: read # only merge when checks pass
+      statuses: read # only merge when checks pass
     steps:
       - name: Automerge Dependabot PRs
-        uses: navikt/automerge-dependabot@v1.5
+        uses: navikt/automerge-dependabot@70455df4433fac78f20d5a248f9ebf07ccac11fe # ratchet:navikt/automerge-dependabot@v1.5
         with:
           token: ${{ github.token }}
           merge-method: squash
