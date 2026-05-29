@@ -28,7 +28,7 @@ func (api *Api) DetailsFor(teamSlug string) (string, error) {
 var teamQuery = `query singleTeam {
        team(slug:\"$slug\") {
           slug
-          members(first:50, after: \"\") {
+          members(first:50 after:\"\") {
              pageInfo {
                 totalCount
                 hasNextPage
