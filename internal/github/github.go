@@ -180,7 +180,7 @@ func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 }
 
 var samlUsersQuery = `query {
-  organization(login: "navikt") {
+  organization(login: \"navikt\") {
     samlIdentityProvider {
       externalIdentities(first: $FIRST, after: \"$AFTER\") {
         pageInfo {

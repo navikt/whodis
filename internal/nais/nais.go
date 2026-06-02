@@ -26,7 +26,7 @@ func (api *Api) DetailsFor(teamSlug string) (*TeamDetails, error) {
 }
 
 var teamQuery = `query {
-       team(slug:"$slug") {
+       team(slug:\"$slug\") {
           slug
           slackChannel
           purpose

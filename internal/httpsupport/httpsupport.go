@@ -74,14 +74,8 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 
 func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error) {
 	queryAsSingleLine := strings.Replace(query, "\n", " ", -1)
-	reqBody := map[string]string{
-		"query": fmt.Sprintf(`%s`, queryAsSingleLine),
-	}
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(reqBody); err != nil {
-		panic(err)
-	}
-	resBody, err := MakePostRequest(uri, authToken, buf.Bytes())
+	reqBody := `{ "query": " ` + queryAsSingleLine + ` " }`
+	resBody, err := MakePostRequest(uri, authToken, []byte(reqBody))
 	if err != nil {
 		return new(T), err
 	}
@@ -90,7 +84,7 @@ func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error)
 	}
 	var deserialized T
 	if err = json.Unmarshal(resBody, &deserialized); err != nil {
-		return nil, err
+		return new(T), err
 	}
 	return &deserialized, nil
 }
