@@ -126,7 +126,6 @@ func (c *Client) loadOrgAdmins() {
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
-	slog.Info("Querying for users page: %s\n", slog.String("endCursor", endCursor))
 	query := strings.Replace(samlUsersQuery, "$FIRST", strconv.Itoa(prPage), 1)
 	query = strings.Replace(query, "$AFTER", endCursor, 1)
 	page, err := httpsupport.MakeGqlQuery[samlUsersResponse](apiBaseURI+"/graphql", authToken, query)
