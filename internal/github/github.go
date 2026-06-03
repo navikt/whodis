@@ -2,6 +2,7 @@ package github
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -65,6 +66,23 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
+}
+
+func (c *Client) SlackChannelFor(repoName string) (string, error) {
+	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		return "", err
+	}
+	lc, err := c.latestCommit(repoName, installationToken)
+	if err != nil {
+		return "", err
+	}
+	files, err := c.filesIn(repoName, lc, installationToken)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("%v\n", files)
+	return "YOLO!", nil
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
@@ -179,6 +197,36 @@ func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 	return filtered
 }
 
+func (c *Client) latestCommit(repo string, authToken string) (string, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repo + "/commits"
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+	if err != nil {
+		return "", err
+	}
+	var commitResponse []singleCommit
+	if err := json.Unmarshal(respBody, &commitResponse); err != nil {
+		return "", err
+	}
+	return commitResponse[0].SHA, nil
+}
+
+func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]string, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repo + "/git/trees/" + commitSHA + "?recursive=true"
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+	if err != nil {
+		return nil, err
+	}
+	var fileTree treeResponse
+	if err := json.Unmarshal(respBody, &fileTree); err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, leaf := range fileTree.Leafs {
+		files = append(files, leaf.Path)
+	}
+	return files, nil
+}
+
 var samlUsersQuery = `query {
   organization(login: \"navikt\") {
     samlIdentityProvider {
@@ -253,4 +301,17 @@ func (resp *samlUsersResponse) AsMap() map[string]string {
 
 type usersResponse struct {
 	Login string `json:"login"`
+}
+
+type singleCommit struct {
+	SHA string `json:"sha"`
+}
+
+type treeResponse struct {
+	Leafs []treeLeaf `json:"tree"`
+}
+
+type treeLeaf struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
 }

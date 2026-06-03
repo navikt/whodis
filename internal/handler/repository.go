@@ -43,6 +43,10 @@ func (repo *Repository) Owners(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 	w.Header().Set("Content-Type", "application/json")
+	_, err = repo.GitHubClient.SlackChannelFor(repoName)
+	if err != nil {
+		slog.Error("error determining slack channel", slog.Any("error", err))
+	}
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
