@@ -3,6 +3,7 @@ package github
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -75,6 +76,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		return nil, err
 	}
 	commitHash, err := c.latestCommit(repoName, installationToken)
+	fmt.Println("Commit: ", commitHash)
 	if err != nil {
 		return nil, err
 	}
@@ -86,12 +88,14 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Deployment tasks: %v\n", deploymentTasks)
 	var deployments []NaisDeployment
 	for cluster, naisYamlPath := range deploymentTasks {
 		naisYaml, err := c.naisYamlContents(repoName, naisYamlPath, installationToken)
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("Found namespace: %s\n", naisYaml.Metadata.Namespace)
 		deployments = append(deployments, NaisDeployment{
 			Cluster:   cluster,
 			Namespace: naisYaml.Metadata.Namespace,
