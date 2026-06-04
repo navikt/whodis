@@ -57,7 +57,7 @@ func (a *App) loadProtectedRoutes(router chi.Router) {
 
 	router.Group(func(r chi.Router) {
 		r.Use(a.auth.JWTMiddleware)
-		r.Get("/repository/{repoName}", repoHandler.Owners)
+		r.Get("/repository/{repoName}", repoHandler.Deployments)
 		r.Get("/nais/{teamSlug}", naisApiHandler.DetailsForTeam)
 	})
 }

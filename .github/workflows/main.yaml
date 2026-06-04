@@ -55,6 +55,6 @@ jobs:
           persist-credentials: false
       - uses: nais/deploy/actions/deploy@fa754451577294aae42872a69b888b3470478ec1
         env:
-          RESOURCE: .nais/nais.yaml
+          RESOURCE: .nais/nais-yaml-api-reply.json
           CLUSTER: prod-gcp
           IMAGE: ${{ needs.build.outputs.image }}

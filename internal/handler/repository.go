@@ -14,7 +14,7 @@ type Repository struct {
 	GitHubClient *github.Client
 }
 
-func (repo *Repository) Owners(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
 	if err != nil {
@@ -43,11 +43,11 @@ func (repo *Repository) Owners(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 	w.Header().Set("Content-Type", "application/json")
-	_, err = repo.GitHubClient.SlackChannelFor(repoName)
+	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName)
 	if err != nil {
 		slog.Error("error determining slack channel", slog.Any("error", err))
 	}
-	if err := json.NewEncoder(w).Encode(reply); err != nil {
+	if err := json.NewEncoder(w).Encode(deployments); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

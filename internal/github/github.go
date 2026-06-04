@@ -1,8 +1,8 @@
 package github
 
 import (
+	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
+	"gopkg.in/yaml.v3"
 )
 
 var apiBaseURI = "https://api.github.com"
@@ -68,21 +69,59 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
-func (c *Client) SlackChannelFor(repoName string) (string, error) {
+func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	lc, err := c.latestCommit(repoName, installationToken)
+	commitHash, err := c.latestCommit(repoName, installationToken)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	files, err := c.filesIn(repoName, lc, installationToken)
+	allFiles, err := c.filesIn(repoName, commitHash, installationToken)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	fmt.Printf("%v\n", files)
-	return "YOLO!", nil
+	deploymentTasks, err := c.extractNaisDeployTasks(allFiles)
+	if err != nil {
+		return nil, err
+	}
+	var deployments []NaisDeployment
+	for cluster, naisYamlPath := range deploymentTasks {
+		naisYaml, err := c.naisYamlContents(repoName, naisYamlPath, installationToken)
+		if err != nil {
+			return nil, err
+		}
+		deployments = append(deployments, NaisDeployment{
+			Cluster:   cluster,
+			Namespace: naisYaml.Metadata.Namespace,
+		})
+	}
+	return deployments, nil
+}
+
+func (c *Client) extractNaisDeployTasks(allFilesInRepo []string) (map[string]string, error) {
+	var workflowFiles []string
+	for _, file := range allFilesInRepo {
+		if strings.HasPrefix(file, "./github/workflows") {
+			workflowFiles = append(workflowFiles, file)
+		}
+	}
+	var deployments map[string]string
+	for _, wfFile := range allFilesInRepo {
+		var workflow workflowFile
+		if err := json.Unmarshal([]byte(wfFile), &workflow); err != nil {
+			return nil, err
+		}
+		for _, job := range workflow.Jobs {
+			for _, step := range job.Steps {
+				if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
+					deployments[step.Env["CLUSTER"]] = step.Env["RESOURCE"]
+				}
+			}
+		}
+	}
+	return deployments, nil
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
@@ -197,36 +236,6 @@ func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 	return filtered
 }
 
-func (c *Client) latestCommit(repo string, authToken string) (string, error) {
-	uri := apiBaseURI + "/repos/navikt/" + repo + "/commits"
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-	if err != nil {
-		return "", err
-	}
-	var commitResponse []singleCommit
-	if err := json.Unmarshal(respBody, &commitResponse); err != nil {
-		return "", err
-	}
-	return commitResponse[0].SHA, nil
-}
-
-func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]string, error) {
-	uri := apiBaseURI + "/repos/navikt/" + repo + "/git/trees/" + commitSHA + "?recursive=true"
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-	if err != nil {
-		return nil, err
-	}
-	var fileTree treeResponse
-	if err := json.Unmarshal(respBody, &fileTree); err != nil {
-		return nil, err
-	}
-	var files []string
-	for _, leaf := range fileTree.Leafs {
-		files = append(files, leaf.Path)
-	}
-	return files, nil
-}
-
 var samlUsersQuery = `query {
   organization(login: \"navikt\") {
     samlIdentityProvider {
@@ -314,4 +323,92 @@ type treeResponse struct {
 type treeLeaf struct {
 	Path string `json:"path"`
 	Size int    `json:"size"`
+}
+
+type workflowFile struct {
+	Jobs map[string]struct {
+		Steps []struct {
+			Uses string            `json:"uses"`
+			Env  map[string]string `json:"env"`
+		}
+	}
+}
+
+type fileReadResponse struct {
+	ContentAsBase64 string `json:"content"`
+}
+
+type naisYaml struct {
+	Metadata struct {
+		Namespace string `yaml:"namespace"`
+	}
+}
+
+type NaisDeployment struct {
+	Cluster   string `json:"cluster"`
+	Namespace string `json:"namespace"`
+}
+
+func (c *Client) latestCommit(repo string, authToken string) (string, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repo + "/commits"
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+	if err != nil {
+		return "", err
+	}
+	var commitResponse []singleCommit
+	if err := json.Unmarshal(respBody, &commitResponse); err != nil {
+		return "", err
+	}
+	return commitResponse[0].SHA, nil
+}
+
+func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]string, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repo + "/git/trees/" + commitSHA + "?recursive=true"
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+	if err != nil {
+		return nil, err
+	}
+	var fileTree treeResponse
+	if err := json.Unmarshal(respBody, &fileTree); err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, leaf := range fileTree.Leafs {
+		files = append(files, leaf.Path)
+	}
+	return files, nil
+}
+
+func (c *Client) naisYamlContents(repo string, filePath string, authToken string) (*naisYaml, error) {
+	fileContents, err := c.getFileContents(repo, filePath, authToken)
+	if err != nil {
+		return nil, err
+	}
+	var naisYaml naisYaml
+	if err := yaml.Unmarshal(fileContents, &naisYaml); err != nil {
+		return nil, err
+	}
+	return &naisYaml, nil
+}
+
+func (c *Client) getFileContents(repo string, filePath string, authToken string) ([]byte, error) {
+	uri := apiBaseURI + "/repos/navikt/" + repo + "/contents/" + filePath
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+	if err != nil {
+		return nil, err
+	}
+	var resp fileReadResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, err
+	}
+	return c.extractTextFrom(resp)
+}
+
+func (c *Client) extractTextFrom(resp fileReadResponse) ([]byte, error) {
+	b64Content := resp.ContentAsBase64
+	decoded, err := base64.URLEncoding.DecodeString(b64Content)
+	if err != nil {
+		return nil, err
+	}
+	return decoded, nil
 }
