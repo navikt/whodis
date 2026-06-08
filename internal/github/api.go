@@ -1,0 +1,96 @@
+package github
+
+import "log/slog"
+
+var samlUsersQuery = `query {
+  organization(login: \"navikt\") {
+    samlIdentityProvider {
+      externalIdentities(first: $FIRST, after: \"$AFTER\") {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          node {
+            samlIdentity {
+              emails {
+                value
+              }
+            }
+            user {
+              login
+            }
+          }
+        }
+      }
+    }
+  }
+} 
+`
+
+type samlUsersResponse struct {
+	Data struct {
+		Organization struct {
+			SamlIdentityProvider struct {
+				ExternalIdentities struct {
+					PageInfo struct {
+						HasNextPage bool   `json:"hasNextPage"`
+						EndCursor   string `json:"endCursor"`
+					} `json:"pageInfo"`
+					Edges []struct {
+						Node struct {
+							SamlIdentity struct {
+								Emails []struct {
+									Value string `json:"value"`
+								} `json:"emails"`
+							} `json:"samlIdentity"`
+							User struct {
+								Login string `json:"login"`
+							} `json:"user"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"externalIdentities"`
+			} `json:"samlIdentityProvider"`
+		} `json:"organization"`
+	} `json:"data"`
+}
+
+type tokenExchangeResult struct {
+	Token string `json:"token"`
+}
+
+func (resp *samlUsersResponse) AsMap() map[string]string {
+	m := make(map[string]string)
+	errorCont := 0
+	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
+		if edge.Node.User.Login == "" || len(edge.Node.SamlIdentity.Emails) == 0 {
+			errorCont += 1
+			continue
+		}
+		key := edge.Node.User.Login
+		m[key] = edge.Node.SamlIdentity.Emails[0].Value
+	}
+	slog.Info("Loaded users from GitHub", slog.Int("count", len(m)), slog.Int("errors", errorCont))
+	return m
+}
+
+type usersResponse struct {
+	Login string `json:"login"`
+}
+
+type singleCommit struct {
+	SHA string `json:"sha"`
+}
+
+type treeResponse struct {
+	Leafs []treeLeaf `json:"tree"`
+}
+
+type treeLeaf struct {
+	Path string `json:"path"`
+	Size int    `json:"size"`
+}
+
+type fileReadResponse struct {
+	ContentAsBase64 string `json:"content"`
+}
