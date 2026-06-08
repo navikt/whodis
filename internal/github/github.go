@@ -311,7 +311,7 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 }
 
 func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
-	b64Content := resp.ContentAsBase64
+	b64Content := strings.Replace(resp.ContentAsBase64, "\n", "", -1)
 	fmt.Printf("%v\n", resp.ContentAsBase64)
 	decoded, err := base64.URLEncoding.DecodeString(b64Content)
 	if err != nil {
