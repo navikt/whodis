@@ -311,11 +311,11 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 }
 
 func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
-	b64Content := strings.Replace(resp.ContentAsBase64, "\n", "", -1)
-	fmt.Printf("%v\n", resp.ContentAsBase64)
-	decoded, err := base64.URLEncoding.DecodeString(b64Content)
+	b64Content := strings.ReplaceAll(resp.ContentAsBase64, "\n", "")
+	fmt.Printf("%v\n", b64Content)
+	decoded, err := base64.StdEncoding.DecodeString(b64Content)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("b64 decoding: %v", err)
 	}
 	return string(decoded), nil
 }
