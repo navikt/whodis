@@ -19,7 +19,6 @@ type App struct {
 }
 
 type config struct {
-	WellKnownURI      string
 	AppPrivateKeyPem  string
 	AppClientID       string
 	AppInstallationID string
@@ -74,7 +73,6 @@ func (a *App) Start(ctx context.Context) error {
 
 func configFromEnv() (*config, error) {
 	requiredVars := []string{
-		"WELL_KNOWN_URI",
 		"GITHUB_APP_PRIVATE_KEY",
 		"GITHUB_APP_CLIENT_ID",
 		"GITHUB_APP_INSTALLATION_ID",
@@ -90,7 +88,6 @@ func configFromEnv() (*config, error) {
 		m[v] = value
 	}
 	return &config{
-		WellKnownURI:      m["WELL_KNOWN_URI"],
 		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
 		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
 		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
