@@ -9,7 +9,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: "main-${{ github.ref }}"
+  group: "app-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
