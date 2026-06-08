@@ -14,7 +14,7 @@ type Repository struct {
 	GitHubClient *github.Client
 }
 
-func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
 	if err != nil {
@@ -42,6 +42,13 @@ func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
+	if err := json.NewEncoder(w).Encode(reply); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
+	repoName := r.PathValue("repoName")
 	w.Header().Set("Content-Type", "application/json")
 	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName)
 	if err != nil {
