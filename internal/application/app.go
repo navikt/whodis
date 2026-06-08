@@ -8,14 +8,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/navikt/whodis/internal/auth"
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/nais"
 )
 
 type App struct {
 	router   http.Handler
-	auth     *auth.Auth
 	ghClient *github.Client
 	nais     *nais.Api
 }
@@ -33,14 +31,9 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	authn, err := auth.New(config.WellKnownURI)
-	if err != nil {
-		return nil, err
-	}
 	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID)
 	naisClient := nais.New(config.NaisApiKey)
 	app := &App{
-		auth:     authn,
 		ghClient: gh,
 		nais:     naisClient,
 	}

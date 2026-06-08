@@ -32,19 +32,7 @@ spec:
     autoInstrumentation:
       enabled: true
       runtime: sdk
-  azure:
-    application:
-      enabled: true
-      allowAllUsers: false
-      claims:
-        groups:
-          - id: d633d27b-a470-4b9d-984e-85499f126e18
-    sidecar:
-      autoLogin: true
-      enabled: true
   env:
-    - name: WELL_KNOWN_URI
-      value: https://login.microsoftonline.com/nav.no/v2.0/.well-known/openid-configuration
     - name: GIN_MODE
       value: release
   envFrom:
@@ -56,3 +44,6 @@ spec:
           namespace: org
       external:
         - host: console.nav.cloud.nais.io
+    inbound:
+      rules:
+        - application: tpt-graph

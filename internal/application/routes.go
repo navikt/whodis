@@ -29,7 +29,7 @@ func (a *App) loadRoutes() {
 	})
 
 	router.Route("/internal", a.loadNaisRoutes)
-	router.Route("/", a.loadProtectedRoutes)
+	router.Route("/", a.loadBusinessRoutes)
 
 	a.router = router
 }
@@ -47,7 +47,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 	})
 }
 
-func (a *App) loadProtectedRoutes(router chi.Router) {
+func (a *App) loadBusinessRoutes(router chi.Router) {
 	repoHandler := handler.Repository{
 		GitHubClient: a.ghClient,
 	}
@@ -56,7 +56,6 @@ func (a *App) loadProtectedRoutes(router chi.Router) {
 	}
 
 	router.Group(func(r chi.Router) {
-		r.Use(a.auth.JWTMiddleware)
 		r.Get("/repository/{repoName}/deployments", repoHandler.Deployments)
 		r.Get("/repository/{repoName}/admins", repoHandler.TeamsForAdmins)
 		r.Get("/nais/{teamSlug}", naisApiHandler.DetailsForTeam)
