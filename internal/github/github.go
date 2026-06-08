@@ -301,6 +301,7 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 	if err := <-errs; err != nil {
 		return nil, err
 	}
+	fmt.Println("There were no errors")
 	return fileContents, nil
 }
 
