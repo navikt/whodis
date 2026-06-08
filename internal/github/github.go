@@ -273,33 +273,38 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 	fmt.Printf("Getting contents for %v\n", files)
 	var fileContents = make(map[string]string, len(files))
 	errs := make(chan error, 1)
-	defer close(errs)
 	fileBaseURI := apiBaseURI + "/repos/navikt/" + repo + "/contents/"
 	wg := sync.WaitGroup{}
 	for _, filePath := range files {
-		go func() {
-			wg.Add(1)
+		wg.Add(1)
+		go func(fp string, errChan chan error) {
 			defer wg.Done()
-			uri := fileBaseURI + "/" + filePath
+			uri := fileBaseURI + "/" + fp
 			respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
 			if err != nil {
 				errs <- err
+				return
 			}
 			var frr fileReadResponse
 			if err := json.Unmarshal(respBody, &frr); err != nil {
-				errs <- err
+				errChan <- err
+				return
 			}
 			fileTxt, err := c.extractTextFrom(frr)
 			if err := json.Unmarshal(respBody, &frr); err != nil {
-				errs <- err
+				errChan <- err
+				return
 			}
-			fileContents[filePath] = fileTxt
-		}()
+			fileContents[fp] = fileTxt
+		}(filePath, errs)
 	}
 	wg.Wait()
+	close(errs)
 	fmt.Println("Are there any errors?")
-	if err := <-errs; err != nil {
-		return nil, err
+	for err := range errs {
+		if err != nil {
+			return nil, err
+		}
 	}
 	fmt.Println("There were no errors")
 	return fileContents, nil
