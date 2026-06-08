@@ -42,6 +42,7 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
