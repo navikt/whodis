@@ -96,7 +96,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Loaded content for %d files: %d\n", len(workflowFileContents))
+	fmt.Printf("Loaded content for %d files: \n", len(workflowFileContents))
 	var naisDeployments []NaisDeployment
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
