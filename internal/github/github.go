@@ -89,14 +89,21 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("Loaded files: %d\n", len(allFiles))
 	workflowFiles := c.filterWorkflowFiles(allFiles)
+	fmt.Printf("Number of workflow files: %d\n", len(workflowFiles))
 	workflowFileContents, err := c.getContentsIn(repoName, workflowFiles, installationToken)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Printf("Loaded content for %d files: %d\n", len(workflowFileContents))
 	var naisDeployments []NaisDeployment
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
 		if err := json.Unmarshal([]byte(wfFileContents), &wf); err != nil {
 			return nil, err
 		}
+		fmt.Printf("Parsed workflow file: %s\n", wfFilePath)
 		deployInfo := wf.deployInfo()
 		if deployInfo == nil {
 			continue
@@ -106,6 +113,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		if err != nil {
 			return nil, err
 		}
+		fmt.Printf("Parsed nais.yaml file: %s\n", pathToFirstNaisYaml)
 		var naisYaml naisYaml
 		if err = json.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
 			return nil, err
