@@ -9,11 +9,11 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
-	"gopkg.in/yaml.v3"
 )
 
 var apiBaseURI = "https://api.github.com"
@@ -70,13 +70,18 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 
+type NaisDeployment struct {
+	Cluster      string
+	Namespace    string
+	WorkflowFile string
+}
+
 func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		return nil, err
 	}
 	commitHash, err := c.latestCommit(repoName, installationToken)
-	fmt.Println("Commit: ", commitHash)
 	if err != nil {
 		return nil, err
 	}
@@ -84,48 +89,34 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	deploymentTasks, err := c.extractNaisDeployTasks(allFiles)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Printf("Deployment tasks: %v\n", deploymentTasks)
-	var deployments []NaisDeployment
-	for cluster, naisYamlPath := range deploymentTasks {
-		naisYaml, err := c.naisYamlContents(repoName, naisYamlPath, installationToken)
+	workflowFiles := c.filterWorkflowFiles(allFiles)
+	workflowFileContents, err := c.getContentsIn(repoName, workflowFiles, installationToken)
+	var naisDeployments []NaisDeployment
+	for wfFilePath, wfFileContents := range workflowFileContents {
+		var wf workflowFile
+		if err := json.Unmarshal([]byte(wfFileContents), &wf); err != nil {
+			return nil, err
+		}
+		deployInfo := wf.deployInfo()
+		if deployInfo == nil {
+			continue
+		}
+		pathToFirstNaisYaml := strings.Split(deployInfo.resource, ",")[0]
+		naisYamlContent, err := c.getContentsIn(repoName, []string{pathToFirstNaisYaml}, installationToken)
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("Found namespace: %s\n", naisYaml.Metadata.Namespace)
-		deployments = append(deployments, NaisDeployment{
-			Cluster:   cluster,
-			Namespace: naisYaml.Metadata.Namespace,
-		})
-	}
-	return deployments, nil
-}
-
-func (c *Client) extractNaisDeployTasks(allFilesInRepo []string) (map[string]string, error) {
-	var workflowFiles []string
-	for _, file := range allFilesInRepo {
-		if strings.HasPrefix(file, "./github/workflows") {
-			workflowFiles = append(workflowFiles, file)
-		}
-	}
-	var deployments map[string]string
-	for _, wfFile := range allFilesInRepo {
-		var workflow workflowFile
-		if err := json.Unmarshal([]byte(wfFile), &workflow); err != nil {
+		var naisYaml naisYaml
+		if err = json.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
 			return nil, err
 		}
-		for _, job := range workflow.Jobs {
-			for _, step := range job.Steps {
-				if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
-					deployments[step.Env["CLUSTER"]] = step.Env["RESOURCE"]
-				}
-			}
-		}
+		naisDeployments = append(naisDeployments, NaisDeployment{
+			Cluster:      deployInfo.cluster,
+			WorkflowFile: repoName + wfFilePath,
+			Namespace:    naisYaml.Metadata.Namespace,
+		})
 	}
-	return deployments, nil
+	return naisDeployments, nil
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
@@ -240,119 +231,6 @@ func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
 	return filtered
 }
 
-var samlUsersQuery = `query {
-  organization(login: \"navikt\") {
-    samlIdentityProvider {
-      externalIdentities(first: $FIRST, after: \"$AFTER\") {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        edges {
-          node {
-            samlIdentity {
-              emails {
-                value
-              }
-            }
-            user {
-              login
-            }
-          }
-        }
-      }
-    }
-  }
-} 
-`
-
-type samlUsersResponse struct {
-	Data struct {
-		Organization struct {
-			SamlIdentityProvider struct {
-				ExternalIdentities struct {
-					PageInfo struct {
-						HasNextPage bool   `json:"hasNextPage"`
-						EndCursor   string `json:"endCursor"`
-					} `json:"pageInfo"`
-					Edges []struct {
-						Node struct {
-							SamlIdentity struct {
-								Emails []struct {
-									Value string `json:"value"`
-								} `json:"emails"`
-							} `json:"samlIdentity"`
-							User struct {
-								Login string `json:"login"`
-							} `json:"user"`
-						} `json:"node"`
-					} `json:"edges"`
-				} `json:"externalIdentities"`
-			} `json:"samlIdentityProvider"`
-		} `json:"organization"`
-	} `json:"data"`
-}
-
-type tokenExchangeResult struct {
-	Token string `json:"token"`
-}
-
-func (resp *samlUsersResponse) AsMap() map[string]string {
-	m := make(map[string]string)
-	errorCont := 0
-	for _, edge := range resp.Data.Organization.SamlIdentityProvider.ExternalIdentities.Edges {
-		if edge.Node.User.Login == "" || len(edge.Node.SamlIdentity.Emails) == 0 {
-			errorCont += 1
-			continue
-		}
-		key := edge.Node.User.Login
-		m[key] = edge.Node.SamlIdentity.Emails[0].Value
-	}
-	slog.Info("Loaded users from GitHub", slog.Int("count", len(m)), slog.Int("errors", errorCont))
-	return m
-}
-
-type usersResponse struct {
-	Login string `json:"login"`
-}
-
-type singleCommit struct {
-	SHA string `json:"sha"`
-}
-
-type treeResponse struct {
-	Leafs []treeLeaf `json:"tree"`
-}
-
-type treeLeaf struct {
-	Path string `json:"path"`
-	Size int    `json:"size"`
-}
-
-type workflowFile struct {
-	Jobs map[string]struct {
-		Steps []struct {
-			Uses string            `json:"uses"`
-			Env  map[string]string `json:"env"`
-		}
-	}
-}
-
-type fileReadResponse struct {
-	ContentAsBase64 string `json:"content"`
-}
-
-type naisYaml struct {
-	Metadata struct {
-		Namespace string `yaml:"namespace"`
-	}
-}
-
-type NaisDeployment struct {
-	Cluster   string `json:"cluster"`
-	Namespace string `json:"namespace"`
-}
-
 func (c *Client) latestCommit(repo string, authToken string) (string, error) {
 	uri := apiBaseURI + "/repos/navikt/" + repo + "/commits"
 	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
@@ -370,11 +248,11 @@ func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]str
 	uri := apiBaseURI + "/repos/navikt/" + repo + "/git/trees/" + commitSHA + "?recursive=true"
 	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("file listing request: %v", err)
 	}
 	var fileTree treeResponse
 	if err := json.Unmarshal(respBody, &fileTree); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal file listing response: %v", err)
 	}
 	var files []string
 	for _, leaf := range fileTree.Leafs {
@@ -383,36 +261,88 @@ func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]str
 	return files, nil
 }
 
-func (c *Client) naisYamlContents(repo string, filePath string, authToken string) (*naisYaml, error) {
-	fileContents, err := c.getFileContents(repo, filePath, authToken)
-	if err != nil {
+func (c *Client) getContentsIn(repo string, files []string, authToken string) (map[string]string, error) {
+	var fileContents map[string]string
+	errs := make(chan error, 1)
+	defer close(errs)
+	fileBaseURI := apiBaseURI + "/repos/navikt/" + repo + "/contents/"
+	wg := sync.WaitGroup{}
+	for _, filePath := range files {
+		go func() {
+			wg.Add(1)
+			defer wg.Done()
+			uri := fileBaseURI + "/" + filePath
+			respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
+			if err != nil {
+				errs <- err
+			}
+			var frr fileReadResponse
+			if err := json.Unmarshal(respBody, &frr); err != nil {
+				errs <- err
+			}
+			fileTxt, err := c.extractTextFrom(frr)
+			if err := json.Unmarshal(respBody, &frr); err != nil {
+				errs <- err
+			}
+			fileContents[filePath] = fileTxt
+		}()
+	}
+	wg.Wait()
+	if err := <-errs; err != nil {
 		return nil, err
 	}
-	var naisYaml naisYaml
-	if err := yaml.Unmarshal(fileContents, &naisYaml); err != nil {
-		return nil, err
-	}
-	return &naisYaml, nil
+	return fileContents, nil
 }
 
-func (c *Client) getFileContents(repo string, filePath string, authToken string) ([]byte, error) {
-	uri := apiBaseURI + "/repos/navikt/" + repo + "/contents/" + filePath
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-	if err != nil {
-		return nil, err
-	}
-	var resp fileReadResponse
-	if err := json.Unmarshal(respBody, &resp); err != nil {
-		return nil, err
-	}
-	return c.extractTextFrom(resp)
-}
-
-func (c *Client) extractTextFrom(resp fileReadResponse) ([]byte, error) {
+func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
 	b64Content := resp.ContentAsBase64
 	decoded, err := base64.URLEncoding.DecodeString(b64Content)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return decoded, nil
+	return string(decoded), nil
+}
+
+func (c *Client) filterWorkflowFiles(allFiles []string) []string {
+	var filtered []string
+	for _, file := range allFiles {
+		if strings.HasPrefix(file, ".github/workflows/") {
+			filtered = append(filtered, file)
+		}
+	}
+	return filtered
+}
+
+type deployInfo struct {
+	resource string
+	cluster  string
+}
+
+func (wff *workflowFile) deployInfo() *deployInfo {
+	for _, job := range wff.Jobs {
+		for _, step := range job.Steps {
+			if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
+				return &deployInfo{
+					cluster:  step.Env["CLUSTER"],
+					resource: step.Env["RESOURCE"],
+				}
+			}
+		}
+	}
+	return nil
+}
+
+type workflowFile struct {
+	Jobs map[string]struct {
+		Steps []struct {
+			Uses string            `json:"uses"`
+			Env  map[string]string `json:"env"`
+		}
+	}
+}
+
+type naisYaml struct {
+	Metadata struct {
+		Namespace string `yaml:"namespace"`
+	}
 }
