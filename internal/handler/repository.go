@@ -53,7 +53,7 @@ func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName)
 	if err != nil {
-		slog.Error("error determining slack channel", slog.Any("error", err))
+		slog.Error("error determining deployments", slog.Any("error", err))
 	}
 	if err := json.NewEncoder(w).Encode(deployments); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
