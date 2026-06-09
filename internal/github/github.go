@@ -111,12 +111,12 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 			return nil, err
 		}
 		var naisYaml naisYaml
-		if err = yaml.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
+		if err = yaml.Unmarshal([]byte(naisYamlContent[pathToFirstNaisYaml]), &naisYaml); err != nil {
 			return nil, err
 		}
 		naisDeployments = append(naisDeployments, NaisDeployment{
 			Cluster:      deployInfo.cluster,
-			WorkflowFile: repoName + wfFilePath,
+			WorkflowFile: repoName + "/" + wfFilePath,
 			Namespace:    naisYaml.Metadata.Namespace,
 		})
 	}
