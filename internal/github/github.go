@@ -90,21 +90,17 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Loaded files: %d\n", len(allFiles))
 	workflowFiles := c.filterWorkflowFiles(allFiles)
-	fmt.Printf("Number of workflow files: %d\n", len(workflowFiles))
 	workflowFileContents, err := c.getContentsIn(repoName, workflowFiles, installationToken)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Loaded content for %d files \n", len(workflowFileContents))
 	var naisDeployments []NaisDeployment
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
 		if err := yaml.Unmarshal([]byte(wfFileContents), &wf); err != nil {
 			return nil, fmt.Errorf("error unmarshalling workflow file: %v", err)
 		}
-		fmt.Printf("Parsed workflow file: %s\n", wfFilePath)
 		deployInfo := wf.deployInfo()
 		if deployInfo == nil {
 			continue
@@ -114,7 +110,6 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("Parsed nais.yaml file: %s\n", pathToFirstNaisYaml)
 		var naisYaml naisYaml
 		if err = yaml.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
 			return nil, err
@@ -271,7 +266,6 @@ func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]str
 }
 
 func (c *Client) getContentsIn(repo string, files []string, authToken string) (map[string]string, error) {
-	fmt.Printf("Getting contents for %v\n", files)
 	var fileContents = make(map[string]string, len(files))
 	errs := make(chan error, 1)
 	fileBaseURI := apiBaseURI + "/repos/navikt/" + repo + "/contents/"
@@ -301,13 +295,11 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 	}
 	wg.Wait()
 	close(errs)
-	fmt.Println("Are there any errors?")
 	for err := range errs {
 		if err != nil {
 			return nil, err
 		}
 	}
-	fmt.Println("There were no errors")
 	return fileContents, nil
 }
 
@@ -317,7 +309,6 @@ func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("b64 decoding: %v", err)
 	}
-	fmt.Printf("%s\n", string(decoded))
 	return string(decoded), nil
 }
 
@@ -340,7 +331,6 @@ func (wff *workflowFile) deployInfo() *deployInfo {
 	for _, job := range wff.Jobs {
 		for _, step := range job.Steps {
 			if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
-				fmt.Printf("envs for %v\n", step.Env)
 				return &deployInfo{
 					cluster:  step.Env["CLUSTER"],
 					resource: step.Env["RESOURCE"],
