@@ -95,7 +95,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	var naisDeployments []NaisDeployment
+	naisDeployments := []NaisDeployment{}
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
 		if err := yaml.Unmarshal([]byte(wfFileContents), &wf); err != nil {
@@ -112,7 +112,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		}
 		var naisYaml naisYaml
 		if err = yaml.Unmarshal([]byte(naisYamlContent[pathToFirstNaisYaml]), &naisYaml); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error unmarshalling nais.yaml: %v", err)
 		}
 		naisDeployments = append(naisDeployments, NaisDeployment{
 			Cluster:      deployInfo.cluster,
