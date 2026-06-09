@@ -6,8 +6,6 @@ metadata:
   labels:
     team: appsec
 spec:
-  ingresses:
-    - https://whodis.intern.nav.no
   image: {{image}}
   port: 8080
   liveness:
