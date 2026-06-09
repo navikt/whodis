@@ -14,6 +14,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
+	"gopkg.in/yaml.v3"
 )
 
 var apiBaseURI = "https://api.github.com"
@@ -96,12 +97,12 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Loaded content for %d files: \n", len(workflowFileContents))
+	fmt.Printf("Loaded content for %d files \n", len(workflowFileContents))
 	var naisDeployments []NaisDeployment
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
-		if err := json.Unmarshal([]byte(wfFileContents), &wf); err != nil {
-			return nil, err
+		if err := yaml.Unmarshal([]byte(wfFileContents), &wf); err != nil {
+			return nil, fmt.Errorf("error unmarshalling workflow file: %v", err)
 		}
 		fmt.Printf("Parsed workflow file: %s\n", wfFilePath)
 		deployInfo := wf.deployInfo()
@@ -115,7 +116,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		}
 		fmt.Printf("Parsed nais.yaml file: %s\n", pathToFirstNaisYaml)
 		var naisYaml naisYaml
-		if err = json.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
+		if err = yaml.Unmarshal([]byte(naisYamlContent[""]), &naisYaml); err != nil {
 			return nil, err
 		}
 		naisDeployments = append(naisDeployments, NaisDeployment{
@@ -312,11 +313,11 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 
 func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
 	b64Content := strings.ReplaceAll(resp.ContentAsBase64, "\n", "")
-	fmt.Printf("%v\n", b64Content)
 	decoded, err := base64.StdEncoding.DecodeString(b64Content)
 	if err != nil {
 		return "", fmt.Errorf("b64 decoding: %v", err)
 	}
+	fmt.Printf("%s\n", string(decoded))
 	return string(decoded), nil
 }
 
@@ -339,6 +340,7 @@ func (wff *workflowFile) deployInfo() *deployInfo {
 	for _, job := range wff.Jobs {
 		for _, step := range job.Steps {
 			if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
+				fmt.Printf("envs for %v\n", step.Env)
 				return &deployInfo{
 					cluster:  step.Env["CLUSTER"],
 					resource: step.Env["RESOURCE"],
