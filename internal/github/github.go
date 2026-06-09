@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -102,7 +103,8 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 			return nil, fmt.Errorf("error unmarshalling workflow file: %v", err)
 		}
 		deployInfo := wf.deployInfo()
-		if deployInfo == nil {
+		if deployInfo == nil || isTemplated(deployInfo.resource) || isTemplated(deployInfo.cluster) {
+			slog.Info("unable to figure out deploy info, probably because values are templated")
 			continue
 		}
 		pathToFirstNaisYaml := strings.Split(deployInfo.resource, ",")[0]
@@ -340,6 +342,11 @@ func (wff *workflowFile) deployInfo() *deployInfo {
 		}
 	}
 	return nil
+}
+
+func isTemplated(str string) bool {
+	match, _ := regexp.MatchString("([{}]+)", str)
+	return match
 }
 
 type workflowFile struct {
