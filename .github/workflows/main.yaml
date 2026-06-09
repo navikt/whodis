@@ -39,7 +39,7 @@ jobs:
         with:
           team: appsec
           pull: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push_image: ${{ github.ref == 'refs/heads/main' }}
   deploy:
     name: deploy
