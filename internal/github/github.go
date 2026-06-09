@@ -116,7 +116,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 		}
 		naisDeployments = append(naisDeployments, NaisDeployment{
 			Cluster:      deployInfo.cluster,
-			WorkflowFile: repoName + "/" + wfFilePath,
+			WorkflowFile: wfFilePath,
 			Namespace:    naisYaml.Metadata.Namespace,
 		})
 	}
