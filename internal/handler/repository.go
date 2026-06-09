@@ -15,7 +15,7 @@ type Repository struct {
 }
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
-	ghUser := r.PathValue("ghUser")
+	ghUser := r.PathValue("username")
 	email := repo.GitHubClient.EmailFor(ghUser)
 	if email == "" {
 		w.WriteHeader(http.StatusNotFound)
