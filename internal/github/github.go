@@ -266,6 +266,7 @@ func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]str
 }
 
 func (c *Client) getContentsIn(repo string, files []string, authToken string) (map[string]string, error) {
+	slog.Info("Getting contents in files", slog.String("repo", repo), slog.Any("files", files))
 	var fileContents = make(map[string]string, len(files))
 	errs := make(chan error, 1)
 	fileBaseURI := apiBaseURI + "/repos/navikt/" + repo + "/contents/"
