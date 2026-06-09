@@ -14,6 +14,22 @@ type Repository struct {
 	GitHubClient *github.Client
 }
 
+func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
+	ghUser := r.PathValue("ghUser")
+	email := repo.GitHubClient.EmailFor(ghUser)
+	if email == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	reply := map[string]string{
+		"email": email,
+	}
+	if err := json.NewEncoder(w).Encode(reply); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)

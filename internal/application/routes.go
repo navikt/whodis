@@ -56,6 +56,7 @@ func (a *App) loadBusinessRoutes(router chi.Router) {
 	}
 
 	router.Group(func(r chi.Router) {
+		r.Get("/ghuser/{username}", repoHandler.EmailForGitHubUser)
 		r.Get("/repository/{repoName}/deployments", repoHandler.Deployments)
 		r.Get("/repository/{repoName}/admins", repoHandler.TeamsForAdmins)
 		r.Get("/nais/{teamSlug}", naisApiHandler.DetailsForTeam)
