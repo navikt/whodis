@@ -54,6 +54,7 @@ func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
 	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName)
 	if err != nil {
 		slog.Error("error determining deployments", slog.Any("error", err))
+		deployments = []github.NaisDeployment{}
 	}
 	if err := json.NewEncoder(w).Encode(deployments); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

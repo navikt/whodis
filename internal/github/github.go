@@ -95,7 +95,7 @@ func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
 	if err != nil {
 		return nil, err
 	}
-	naisDeployments := []NaisDeployment{}
+	var naisDeployments []NaisDeployment
 	for wfFilePath, wfFileContents := range workflowFileContents {
 		var wf workflowFile
 		if err := yaml.Unmarshal([]byte(wfFileContents), &wf); err != nil {
