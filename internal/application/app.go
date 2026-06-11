@@ -10,6 +10,9 @@ import (
 
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/nais"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 type App struct {
@@ -32,6 +35,16 @@ func New() (*App, error) {
 	}
 	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID)
 	naisClient := nais.New(config.NaisApiKey)
+
+	exporter, err := otlptracegrpc.New(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	provider := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter, sdktrace.WithBatchTimeout(5*time.Second)),
+	)
+	otel.SetTracerProvider(provider)
+
 	app := &App{
 		ghClient: gh,
 		nais:     naisClient,
