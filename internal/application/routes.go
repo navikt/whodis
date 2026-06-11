@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
 	"github.com/navikt/whodis/internal/handler"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func (a *App) loadRoutes() {
@@ -31,7 +32,8 @@ func (a *App) loadRoutes() {
 	router.Route("/internal", a.loadNaisRoutes)
 	router.Route("/", a.loadBusinessRoutes)
 
-	a.router = router
+	instrumentedRouter := otelhttp.NewHandler(router, "whodis")
+	a.router = instrumentedRouter
 }
 
 func (a *App) loadNaisRoutes(router chi.Router) {
