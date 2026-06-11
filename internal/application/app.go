@@ -64,6 +64,9 @@ func (a *App) Start(ctx context.Context) error {
 	ch := make(chan error, 1)
 
 	err := a.ghClient.Ping()
+	if err != nil {
+		ch <- err
+	}
 
 	go func() {
 		err := server.ListenAndServe()

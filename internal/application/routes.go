@@ -13,6 +13,8 @@ import (
 
 func (a *App) loadRoutes() {
 	router := chi.NewRouter()
+	instrumentedRouter := otelhttp.NewHandler(router, "whodis")
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(logger)
 
@@ -32,7 +34,6 @@ func (a *App) loadRoutes() {
 	router.Route("/internal", a.loadNaisRoutes)
 	router.Route("/", a.loadBusinessRoutes)
 
-	instrumentedRouter := otelhttp.NewHandler(router, "whodis")
 	a.router = instrumentedRouter
 }
 
