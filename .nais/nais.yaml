@@ -28,7 +28,7 @@ spec:
       destinations:
         - id: loki
     autoInstrumentation:
-      enabled: false
+      enabled: true
       runtime: sdk
   env:
     - name: GIN_MODE
