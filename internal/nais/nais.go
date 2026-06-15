@@ -1,6 +1,7 @@
 package nais
 
 import (
+	"os"
 	"strings"
 
 	"github.com/navikt/whodis/internal/httpsupport"
@@ -9,20 +10,32 @@ import (
 var naisApiBaseUrl = "https://console.nav.cloud.nais.io/graphql"
 
 type Api struct {
-	apiKey string
+	apiKeyLocation string
 }
 
-func New(apiKey string) *Api {
-	return &Api{apiKey}
+func New(apiKeyLocation string) *Api {
+	return &Api{apiKeyLocation}
 }
 
 func (api *Api) DetailsFor(teamSlug string) (*TeamDetails, error) {
 	query := strings.Replace(teamQuery, "$slug", teamSlug, 1)
-	resp, err := httpsupport.MakeGqlQuery[teamQueryResponse](naisApiBaseUrl, api.apiKey, query)
+	token, err := api.loadNaisApiToken()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := httpsupport.MakeGqlQuery[teamQueryResponse](naisApiBaseUrl, token, query)
 	if err != nil {
 		return nil, err
 	}
 	return resp.asTeam(), nil
+}
+
+func (api *Api) loadNaisApiToken() (string, error) {
+	fileContents, err := os.ReadFile(api.apiKeyLocation)
+	if err != nil {
+		return "", err
+	}
+	return string(fileContents), nil
 }
 
 var teamQuery = `query {

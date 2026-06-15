@@ -22,10 +22,10 @@ type App struct {
 }
 
 type config struct {
-	AppPrivateKeyPem  string
-	AppClientID       string
-	AppInstallationID string
-	NaisApiKey        string
+	AppPrivateKeyPem   string
+	AppClientID        string
+	AppInstallationID  string
+	NaisApiKeyLocation string
 }
 
 func New() (*App, error) {
@@ -34,7 +34,7 @@ func New() (*App, error) {
 		return nil, err
 	}
 	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID)
-	naisClient := nais.New(config.NaisApiKey)
+	naisClient := nais.New(config.NaisApiKeyLocation)
 
 	exporter, err := otlptracegrpc.New(context.Background())
 	if err != nil {
@@ -104,27 +104,10 @@ func configFromEnv() (*config, error) {
 		m[v] = value
 	}
 	conf := &config{
-		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
-		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
-		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
+		AppPrivateKeyPem:   m["GITHUB_APP_PRIVATE_KEY"],
+		AppClientID:        m["GITHUB_APP_CLIENT_ID"],
+		AppInstallationID:  m["GITHUB_APP_INSTALLATION_ID"],
+		NaisApiKeyLocation: m["NAIS_SERVICE_ACCOUNT_TOKEN_PATH"],
 	}
-	naisApiKey, err := loadNaisApiToken()
-	if err != nil {
-		return nil, err
-	}
-	conf.NaisApiKey = naisApiKey
 	return conf, nil
-}
-
-func loadNaisApiToken() (string, error) {
-	envName := "NAIS_SERVICE_ACCOUNT_TOKEN_PATH"
-	tokenLocation := os.Getenv(envName)
-	if tokenLocation == "" {
-		return "", fmt.Errorf("required env var %s is not set", envName)
-	}
-	fileContents, err := os.ReadFile(tokenLocation)
-	if err != nil {
-		return "", err
-	}
-	return string(fileContents), nil
 }
