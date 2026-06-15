@@ -92,7 +92,7 @@ func configFromEnv() (*config, error) {
 		"GITHUB_APP_PRIVATE_KEY",
 		"GITHUB_APP_CLIENT_ID",
 		"GITHUB_APP_INSTALLATION_ID",
-		"NAIS_API_TOKEN",
+		"NAIS_SERVICE_ACCOUNT_TOKEN_PATH",
 	}
 	m := map[string]string{}
 
@@ -103,10 +103,28 @@ func configFromEnv() (*config, error) {
 		}
 		m[v] = value
 	}
-	return &config{
+	conf := &config{
 		AppPrivateKeyPem:  m["GITHUB_APP_PRIVATE_KEY"],
 		AppClientID:       m["GITHUB_APP_CLIENT_ID"],
 		AppInstallationID: m["GITHUB_APP_INSTALLATION_ID"],
-		NaisApiKey:        m["NAIS_API_TOKEN"],
-	}, nil
+	}
+	naisApiKey, err := loadNaisApiToken()
+	if err != nil {
+		return nil, err
+	}
+	conf.NaisApiKey = naisApiKey
+	return conf, nil
+}
+
+func loadNaisApiToken() (string, error) {
+	envName := "NAIS_SERVICE_ACCOUNT_TOKEN_PATH"
+	tokenLocation := os.Getenv(envName)
+	if tokenLocation == "" {
+		return "", fmt.Errorf("required env var %s is not set", envName)
+	}
+	fileContents, err := os.ReadFile(tokenLocation)
+	if err != nil {
+		return "", err
+	}
+	return string(fileContents), nil
 }
