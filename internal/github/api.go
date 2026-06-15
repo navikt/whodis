@@ -54,7 +54,8 @@ type samlUsersResponse struct {
 }
 
 type tokenExchangeResult struct {
-	Token string `json:"token"`
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 func (resp *samlUsersResponse) AsMap() map[string]string {

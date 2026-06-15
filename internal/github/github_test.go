@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestSamlUsersResponseParsing(t *testing.T) {
@@ -42,6 +43,53 @@ func TestFilteringOutOrgOwnersFromRepoAdmins(t *testing.T) {
 	actual := client.filterOutOrgAdmins(repoAdmins)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Org admins should be filtered out: %v", actual)
+	}
+}
+
+func TestInstallationTokenExpiresInLessThan10Mins(t *testing.T) {
+	now, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:15:10 +0200")
+	expiry, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:25:09 +0200")
+	c := Client{
+		installationToken:       "whatever",
+		installationTokenExpiry: expiry,
+	}
+	if !c.tokenShouldBeRefreshed(now) {
+		t.Error("token should be refreshed")
+	}
+}
+
+func TestInstallationTokenExpiresInMoreThan10Mins(t *testing.T) {
+	now, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:15:10 +0200")
+	expiry, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:25:11 +0200")
+	c := Client{
+		installationToken:       "whatever",
+		installationTokenExpiry: expiry,
+	}
+	if c.tokenShouldBeRefreshed(now) {
+		t.Error("token should not be refreshed")
+	}
+}
+
+func TestInstallationTokenExpiresInLessThan10MinsDifferentTimeZones(t *testing.T) {
+	now, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:15:10 +0200")
+	expiry, _ := time.Parse(time.RFC3339, "2026-06-15T21:25:09Z")
+	c := Client{
+		installationToken:       "whatever",
+		installationTokenExpiry: expiry,
+	}
+	if !c.tokenShouldBeRefreshed(now) {
+		t.Error("token should be refreshed")
+	}
+}
+
+func TestMissingInstallationTokenMustBeRefreshed(t *testing.T) {
+	now, _ := time.Parse(time.RFC1123Z, "Mon, 15 Jun 2026 23:15:10 +0200")
+	expiry, _ := time.Parse(time.RFC3339, "2026-06-15T21:25:11Z")
+	c := Client{
+		installationTokenExpiry: expiry,
+	}
+	if !c.tokenShouldBeRefreshed(now) {
+		t.Error("token should be refreshed")
 	}
 }
 

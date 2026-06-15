@@ -21,11 +21,13 @@ import (
 var apiBaseURI = "https://api.github.com"
 
 type Client struct {
-	pkPEM     string
-	clientId  string
-	installId string
-	orgUsers  map[string]string
-	orgAdmins []string
+	pkPEM                   string
+	clientId                string
+	installId               string
+	installationToken       string
+	installationTokenExpiry time.Time
+	orgUsers                map[string]string
+	orgAdmins               []string
 }
 
 func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
@@ -194,19 +196,29 @@ func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor strin
 }
 
 func (c *Client) retrieveAuthToken() (string, error) {
+	if !c.tokenShouldBeRefreshed(time.Now()) {
+		return c.installationToken, nil
+	}
+
 	exchangeToken, err := c.createExchangeToken()
 	if err != nil {
 		return "", err
 	}
-	responseBody, err := httpsupport.MakePostRequest(apiBaseURI+"/app/installations/"+c.installId+"/access_tokens", exchangeToken, nil)
+	resp, err := httpsupport.MakePostRequest(apiBaseURI+"/app/installations/"+c.installId+"/access_tokens", exchangeToken, nil)
 	if err != nil {
 		return "", err
 	}
-	var tokenExchangeResult tokenExchangeResult
-	if err := json.Unmarshal(responseBody, &tokenExchangeResult); err != nil {
+	var tExRes tokenExchangeResult
+	if err := json.Unmarshal(resp, &tExRes); err != nil {
 		return "", err
 	}
-	return tokenExchangeResult.Token, nil
+	tokenExpiry, err := time.Parse(time.RFC3339, tExRes.ExpiresAt)
+	if err != nil {
+		return "", err
+	}
+	c.installationToken = tExRes.Token
+	c.installationTokenExpiry = tokenExpiry
+	return tExRes.Token, nil
 }
 
 func (c *Client) createExchangeToken() (string, error) {
@@ -323,6 +335,15 @@ func (c *Client) filterWorkflowFiles(allFiles []string) []string {
 		}
 	}
 	return filtered
+}
+
+func (c *Client) tokenShouldBeRefreshed(now time.Time) bool {
+	if c.installationToken == "" {
+		return true
+	}
+
+	in10Mins := now.Add(10 * time.Minute)
+	return c.installationTokenExpiry.Before(in10Mins)
 }
 
 type deployInfo struct {
