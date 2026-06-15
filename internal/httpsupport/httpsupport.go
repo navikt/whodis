@@ -18,7 +18,7 @@ func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GET request failed with status %d", resp.StatusCode)
+		return nil, fmt.Errorf("GET request to %s failed with status %d", uri, resp.StatusCode)
 	}
 	return readResponse(resp)
 }
@@ -38,7 +38,7 @@ func MakeAuthenticatedGetRequest(uri, authToken string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GET request failed with status %d", resp.StatusCode)
+		return nil, fmt.Errorf("GET request to %s failed with status %d", uri, resp.StatusCode)
 	}
 	return readResponse(resp)
 }
