@@ -218,7 +218,8 @@ func (c *Client) retrieveAuthToken() (string, error) {
 	}
 	c.installationToken = tExRes.Token
 	c.installationTokenExpiry = tokenExpiry
-	return tExRes.Token, nil
+	slog.Info("The new token expires at", slog.Time("time", tokenExpiry))
+	return c.installationToken, nil
 }
 
 func (c *Client) createExchangeToken() (string, error) {
