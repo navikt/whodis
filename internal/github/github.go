@@ -339,11 +339,14 @@ func (c *Client) filterWorkflowFiles(allFiles []string) []string {
 
 func (c *Client) tokenShouldBeRefreshed(now time.Time) bool {
 	if c.installationToken == "" {
+		slog.Info("No GitHub token present. time to get a new one")
 		return true
 	}
 
 	in10Mins := now.Add(10 * time.Minute)
-	return c.installationTokenExpiry.Before(in10Mins)
+	shouldRefresh := c.installationTokenExpiry.Before(in10Mins)
+	slog.Info("Should GitHub token be refreshed?", slog.Bool("refresh", shouldRefresh))
+	return shouldRefresh
 }
 
 type deployInfo struct {
