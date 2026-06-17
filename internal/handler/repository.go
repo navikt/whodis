@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/navikt/whodis/internal/github"
@@ -38,27 +39,32 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	var allTeamkatalogenResponses []teamkatalogen.UserDetails
 	var wg sync.WaitGroup
 	wg.Add(len(repoAdmins))
-	var reply []adminDetails
+	var mu sync.Mutex
 	for _, admin := range repoAdmins {
 		go func() {
-			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin))
 			defer wg.Done()
+			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin))
 			if err != nil {
 				slog.Error("error getting repo admin details", slog.Any("error", err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			reply = append(reply, adminDetails{
-				GitHubUsername: admin,
-				WorkEmail:      repo.GitHubClient.EmailFor(admin),
-				Teams:          teamkatalogenReponse.Teams,
-			})
+			mu.Lock()
+			allTeamkatalogenResponses = append(allTeamkatalogenResponses, *teamkatalogenReponse)
+			mu.Unlock()
 		}()
 	}
 	wg.Wait()
+	unique := extractUnique(allTeamkatalogenResponses)
 	w.Header().Set("Content-Type", "application/json")
+	reply := TeamsForRepoAdminsReply{
+		Usernames:     repoAdmins,
+		Teams:         unique.Teams,
+		SlackChannels: unique.SlackChannels,
+	}
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -77,8 +83,33 @@ func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type adminDetails struct {
-	GitHubUsername string               `json:"github_username"`
-	WorkEmail      string               `json:"work_email"`
-	Teams          []teamkatalogen.Team `json:"teams"`
+func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings {
+	var uniqueTeams []string
+	var uniqueSlackChannels []string
+
+	for _, userDetails := range fromTeamkatalogen {
+		for _, team := range userDetails.Teams {
+			if !slices.Contains(uniqueTeams, team.Name) {
+				uniqueTeams = append(uniqueTeams, team.Name)
+			}
+			if !slices.Contains(uniqueSlackChannels, team.SlackChannel) {
+				uniqueSlackChannels = append(uniqueSlackChannels, team.SlackChannel)
+			}
+		}
+	}
+	return &uniqueThings{
+		Teams:         uniqueTeams,
+		SlackChannels: uniqueSlackChannels,
+	}
+}
+
+type uniqueThings struct {
+	Teams         []string
+	SlackChannels []string
+}
+
+type TeamsForRepoAdminsReply struct {
+	Usernames     []string `json:"usernames"`
+	Teams         []string `json:"members_of"`
+	SlackChannels []string `json:"slack_channels"`
 }
