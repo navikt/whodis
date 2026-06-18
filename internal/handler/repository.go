@@ -108,7 +108,7 @@ func (r *Repository) enrichWithEmails(usernames []string) []User {
 	for _, username := range usernames {
 		users = append(users, User{
 			Username: username,
-			email:    r.GitHubClient.EmailFor(username),
+			Email:    r.GitHubClient.EmailFor(username),
 		})
 	}
 	return users
@@ -127,5 +127,5 @@ type TeamsForRepoAdminsReply struct {
 
 type User struct {
 	Username string `json:"username"`
-	email    string `json:"email"`
+	Email    string `json:"email"`
 }
