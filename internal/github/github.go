@@ -71,7 +71,6 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
-	fmt.Printf("%d vs %d\n", len(repoAdminLogins), len(c.filterOutOrgAdmins(repoAdminLogins)))
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
 

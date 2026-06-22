@@ -34,6 +34,7 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
+	slog.Info(repoName, len(repoAdmins))
 	if err != nil {
 		slog.Error("error getting repo admins", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -103,12 +104,12 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 	}
 }
 
-func (r *Repository) enrichWithEmails(usernames []string) []User {
+func (repo *Repository) enrichWithEmails(usernames []string) []User {
 	users := make([]User, len(usernames))
 	for _, username := range usernames {
 		users = append(users, User{
 			Username: username,
-			Email:    r.GitHubClient.EmailFor(username),
+			Email:    repo.GitHubClient.EmailFor(username),
 		})
 	}
 	return users
