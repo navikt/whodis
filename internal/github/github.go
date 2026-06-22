@@ -69,7 +69,9 @@ func (c *Client) AdminsFor(repoName string) ([]string, error) {
 	}
 	var repoAdminLogins []string
 	for _, repoAdmin := range allRepoAdmins {
-		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
+		if repoAdmin.Login != "" {
+			repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
+		}
 	}
 	return c.filterOutOrgAdmins(repoAdminLogins), nil
 }
