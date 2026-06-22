@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -34,7 +35,7 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
-	slog.Info(repoName, len(repoAdmins))
+	slog.Info(fmt.Sprintf("%s has %d admins\n", repoName, len(repoAdmins)))
 	if err != nil {
 		slog.Error("error getting repo admins", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
