@@ -121,7 +121,7 @@ func splitSlackChannels(raw string) []string {
 		return trimmed
 	}
 	if strings.Contains(raw, " ") {
-		spaces := regexp.MustCompile("\\s+")
+		spaces := regexp.MustCompile(`\s+`)
 		return spaces.Split(raw, -1)
 	}
 

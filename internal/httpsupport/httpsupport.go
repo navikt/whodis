@@ -98,7 +98,7 @@ func isError(responseBody []byte) bool {
 	if err := json.Unmarshal(responseBody, &rawResponse); err != nil {
 		return true
 	}
-	return rawResponse.Errors != nil && len(rawResponse.Errors) > 0
+	return len(rawResponse.Errors) > 0
 }
 
 func readResponse(resp *http.Response) ([]byte, error) {

@@ -311,6 +311,10 @@ func (c *Client) getContentsIn(repo string, files []string, authToken string) (m
 				return
 			}
 			fileTxt, err := c.extractTextFrom(frr)
+			if err != nil {
+				errs <- err
+				return
+			}
 			if err := json.Unmarshal(respBody, &frr); err != nil {
 				errChan <- err
 				return
