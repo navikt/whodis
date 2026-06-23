@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -66,7 +65,6 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		Teams:         unique.Teams,
 		SlackChannels: unique.SlackChannels,
 	}
-	fmt.Printf("%v", reply.Users)
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -106,12 +104,14 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 }
 
 func (repo *Repository) enrichWithEmails(usernames []string) []User {
-	users := make([]User, len(usernames))
+	var users []User
 	for _, username := range usernames {
-		users = append(users, User{
-			Username: username,
-			Email:    repo.GitHubClient.EmailFor(username),
-		})
+		if username != "" {
+			users = append(users, User{
+				Username: username,
+				Email:    repo.GitHubClient.EmailFor(username),
+			})
+		}
 	}
 	return users
 }
