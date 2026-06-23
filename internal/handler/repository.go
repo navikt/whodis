@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/navikt/whodis/internal/github"
@@ -92,8 +94,13 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 			if !slices.Contains(uniqueTeams, team.Name) {
 				uniqueTeams = append(uniqueTeams, team.Name)
 			}
-			if !slices.Contains(uniqueSlackChannels, team.SlackChannel) {
-				uniqueSlackChannels = append(uniqueSlackChannels, team.SlackChannel)
+			// Some teams put several Slack channels separated by
+			// space or comma i the field in Teamkatalogen
+			splittedSlackChannels := splitSlackChannels(team.SlackChannel)
+			for _, slackChannel := range splittedSlackChannels {
+				if !slices.Contains(uniqueSlackChannels, slackChannel) {
+					uniqueSlackChannels = append(uniqueSlackChannels, slackChannel)
+				}
 			}
 		}
 	}
@@ -101,6 +108,24 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 		Teams:         uniqueTeams,
 		SlackChannels: uniqueSlackChannels,
 	}
+}
+
+func splitSlackChannels(raw string) []string {
+	if strings.Contains(raw, ",") {
+		comma := regexp.MustCompile(",")
+		splitted := comma.Split(raw, -1)
+		var trimmed []string
+		for _, s := range splitted {
+			trimmed = append(trimmed, strings.TrimSpace(s))
+		}
+		return trimmed
+	}
+	if strings.Contains(raw, " ") {
+		spaces := regexp.MustCompile("\\s+")
+		return spaces.Split(raw, -1)
+	}
+
+	return []string{raw}
 }
 
 func (repo *Repository) enrichWithEmails(usernames []string) []User {

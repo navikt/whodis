@@ -44,3 +44,59 @@ func TestExtractionOfUniqueTeamsAndSlackChannels(t *testing.T) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
 }
+
+func TestSlackChannelsMayBeCommaSeparated(t *testing.T) {
+	fromTeamkatalogen := []teamkatalogen.UserDetails{
+		{
+			Teams: []teamkatalogen.Team{
+				{
+					Name:         "team1",
+					SlackChannel: "ch1",
+					NaisTeams:    []string{"nais1", "nais2"},
+				},
+				{
+					Name:         "team2",
+					SlackChannel: "ch1, ch2, ch3",
+					NaisTeams:    []string{"nais1", "nais2"},
+				},
+			},
+		},
+	}
+
+	expected := &uniqueThings{
+		Teams:         []string{"team1", "team2"},
+		SlackChannels: []string{"ch1", "ch2", "ch3"},
+	}
+	actual := extractUnique(fromTeamkatalogen)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("expected: %v, actual: %v", expected, actual)
+	}
+}
+
+func TestSlackChannelsMayBeSpaceSeparated(t *testing.T) {
+	fromTeamkatalogen := []teamkatalogen.UserDetails{
+		{
+			Teams: []teamkatalogen.Team{
+				{
+					Name:         "team1",
+					SlackChannel: "ch1",
+					NaisTeams:    []string{"nais1", "nais2"},
+				},
+				{
+					Name:         "team2",
+					SlackChannel: "ch1  ch2  ch3",
+					NaisTeams:    []string{"nais1", "nais2"},
+				},
+			},
+		},
+	}
+
+	expected := &uniqueThings{
+		Teams:         []string{"team1", "team2"},
+		SlackChannels: []string{"ch1", "ch2", "ch3"},
+	}
+	actual := extractUnique(fromTeamkatalogen)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Errorf("expected: %v, actual: %v", expected, actual)
+	}
+}
