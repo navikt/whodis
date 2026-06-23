@@ -7,13 +7,22 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
+	"github.com/go-chi/metrics"
 	"github.com/navikt/whodis/internal/handler"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func (a *App) loadRoutes() {
 	router := chi.NewRouter()
+
 	instrumentedRouter := otelhttp.NewHandler(router, "whodis")
+	router.Use(metrics.Collector(metrics.CollectorOpts{
+		Host:  false,
+		Proto: true,
+		Skip: func(r *http.Request) bool {
+			return r.Method != "OPTIONS"
+		},
+	}))
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(logger)
@@ -48,6 +57,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	})
+	router.Handle("/metrics", metrics.Handler())
 }
 
 func (a *App) loadBusinessRoutes(router chi.Router) {
