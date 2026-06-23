@@ -60,6 +60,7 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
+	slog.Info(fmt.Sprintf("got %d responses from teamkatalogen\n", len(allTeamkatalogenResponses)))
 	unique := extractUnique(allTeamkatalogenResponses)
 	w.Header().Set("Content-Type", "application/json")
 	reply := TeamsForRepoAdminsReply{
@@ -106,6 +107,7 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 }
 
 func (repo *Repository) enrichWithEmails(usernames []string) []User {
+	slog.Info(fmt.Sprintf("enriching with email for %d usernames\n", len(usernames)))
 	users := make([]User, len(usernames))
 	for _, username := range usernames {
 		users = append(users, User{
