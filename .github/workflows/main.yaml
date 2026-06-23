@@ -58,3 +58,4 @@ jobs:
           RESOURCE: .nais/nais.yaml
           CLUSTER: prod-gcp
           IMAGE: ${{ needs.build.outputs.image }}
+
