@@ -132,15 +132,16 @@ func (c *Client) SemiStaticDataIsLoaded() bool {
 }
 
 func (c *Client) syncSemiStaticDataPeriodically() {
-	c.loadOrgUsers()
-	c.loadOrgAdmins()
+	mutex := sync.Mutex{}
+	c.loadOrgUsers(&mutex)
+	c.loadOrgAdmins(&mutex)
 	for range time.Tick(time.Hour * 12) {
-		c.loadOrgUsers()
-		c.loadOrgAdmins()
+		c.loadOrgUsers(&mutex)
+		c.loadOrgAdmins(&mutex)
 	}
 }
 
-func (c *Client) loadOrgUsers() {
+func (c *Client) loadOrgUsers(mutex *sync.Mutex) {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		slog.Error("error loading all users", slog.Any("error", err))
@@ -161,11 +162,13 @@ func (c *Client) loadOrgUsers() {
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
 
+	mutex.Lock()
 	c.orgUsers = m
+	mutex.Unlock()
 	slog.Info("Loaded users from GitHub", slog.Int("ghUsers", len(c.orgUsers)))
 }
 
-func (c *Client) loadOrgAdmins() {
+func (c *Client) loadOrgAdmins(mutex *sync.Mutex) {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		slog.Error("Error retrieving auth token", slog.Any("error", err))
@@ -185,7 +188,9 @@ func (c *Client) loadOrgAdmins() {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
+	mutex.Lock()
 	c.orgAdmins = usernames
+	mutex.Unlock()
 	slog.Info("Loaded org admins\n", slog.Int("count", len(c.orgAdmins)))
 }
 
