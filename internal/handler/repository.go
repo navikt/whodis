@@ -35,7 +35,6 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
 	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
-	slog.Info(fmt.Sprintf("%s has %d admins\n", repoName, len(repoAdmins)))
 	if err != nil {
 		slog.Error("error getting repo admins", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -60,7 +59,6 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	wg.Wait()
-	slog.Info(fmt.Sprintf("got %d responses from teamkatalogen\n", len(allTeamkatalogenResponses)))
 	unique := extractUnique(allTeamkatalogenResponses)
 	w.Header().Set("Content-Type", "application/json")
 	reply := TeamsForRepoAdminsReply{
@@ -68,6 +66,7 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		Teams:         unique.Teams,
 		SlackChannels: unique.SlackChannels,
 	}
+	fmt.Printf("%v", reply.Users)
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -107,7 +106,6 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 }
 
 func (repo *Repository) enrichWithEmails(usernames []string) []User {
-	slog.Info(fmt.Sprintf("enriching with email for %d usernames\n", len(usernames)))
 	users := make([]User, len(usernames))
 	for _, username := range usernames {
 		users = append(users, User{
