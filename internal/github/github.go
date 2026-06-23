@@ -167,6 +167,10 @@ func (c *Client) loadOrgUsers() {
 
 func (c *Client) loadOrgAdmins() {
 	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		slog.Error("Error retrieving auth token", slog.Any("error", err))
+		return
+	}
 	httpResponse, err := httpsupport.MakeAuthenticatedGetRequest(apiBaseURI+"/orgs/navikt/members?role=admin", installationToken)
 	if err != nil {
 		slog.Error("Error loading org admins", slog.Any("error", err))
