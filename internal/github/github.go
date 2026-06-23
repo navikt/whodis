@@ -43,7 +43,11 @@ func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
 }
 
 func (c *Client) Ping() error {
-	if _, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI); err != nil {
+	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		return err
+	}
+	if _, err := httpsupport.MakeAuthenticatedGetRequest(apiBaseURI, installationToken); err != nil {
 		return err
 	}
 	return nil
