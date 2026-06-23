@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 
 	"github.com/navikt/whodis/internal/nais"
 )
@@ -12,8 +13,14 @@ type NaisApi struct {
 	NaisClient *nais.Api
 }
 
+var re = regexp.MustCompile("^[a-zA-Z0-9æøåÆØÅ\\-_]{1,50}$")
+
 func (api *NaisApi) DetailsForTeam(w http.ResponseWriter, r *http.Request) {
 	teamSlug := r.PathValue("teamSlug")
+	if !re.Match([]byte(teamSlug)) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 	teamDetails, err := api.NaisClient.DetailsFor(teamSlug)
 	if err != nil {
 		slog.Error("error getting app details", slog.Any("error", err))
