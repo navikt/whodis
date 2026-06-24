@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
@@ -32,7 +33,7 @@ func (a *App) loadRoutes() {
 		Schema:        httplog.SchemaOTEL,
 		RecoverPanics: true,
 		Skip: func(req *http.Request, respStatus int) bool {
-			return req.RequestURI == "/internal/isready" || req.RequestURI == "/internal/isalive"
+			return strings.HasPrefix(req.RequestURI, "/internal")
 		},
 	}))
 
