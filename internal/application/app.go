@@ -13,12 +13,14 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type App struct {
 	router   http.Handler
 	ghClient *github.Client
 	nais     *nais.Api
+	tracer   trace.Tracer
 }
 
 type config struct {
@@ -44,10 +46,12 @@ func New() (*App, error) {
 		sdktrace.WithBatcher(exporter, sdktrace.WithBatchTimeout(5*time.Second)),
 	)
 	otel.SetTracerProvider(provider)
+	tracer := provider.Tracer("whodis")
 
 	app := &App{
 		ghClient: gh,
 		nais:     naisClient,
+		tracer:   tracer,
 	}
 	app.loadRoutes()
 	return app, nil

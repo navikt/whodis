@@ -11,13 +11,17 @@ import (
 
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/teamkatalogen"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Repository struct {
 	GitHubClient *github.Client
+	Tracer       trace.Tracer
 }
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
+	_, span := repo.Tracer.Start(r.Context(), "EmailForGitHubUser")
+	defer span.End()
 	ghUser := r.PathValue("username")
 	email := repo.GitHubClient.EmailFor(ghUser)
 	if email == "" {
@@ -34,8 +38,10 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 }
 
 func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
+	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForAdmins")
+	defer span.End()
 	repoName := r.PathValue("repoName")
-	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName)
+	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting repo admins", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
@@ -73,9 +79,11 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 }
 
 func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
+	ctx, span := repo.Tracer.Start(r.Context(), "Deployments")
+	defer span.End()
 	repoName := r.PathValue("repoName")
 	w.Header().Set("Content-Type", "application/json")
-	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName)
+	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName, ctx)
 	if err != nil {
 		slog.Error("error determining deployments", slog.Any("error", err))
 		deployments = []github.NaisDeployment{}

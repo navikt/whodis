@@ -1,10 +1,12 @@
 package nais
 
 import (
+	"context"
 	"os"
 	"strings"
 
 	"github.com/navikt/whodis/internal/httpsupport"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var naisApiBaseUrl = "https://console.nav.cloud.nais.io/graphql"
@@ -17,7 +19,9 @@ func New(apiKeyLocation string) *Api {
 	return &Api{apiKeyLocation}
 }
 
-func (api *Api) DetailsFor(teamSlug string) (*TeamDetails, error) {
+func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
 	query := strings.Replace(teamQuery, "$slug", teamSlug, 1)
 	token, err := api.loadNaisApiToken()
 	if err != nil {

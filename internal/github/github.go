@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
+	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,7 +59,9 @@ func (c *Client) EmailFor(username string) string {
 	return c.orgUsers[username]
 }
 
-func (c *Client) AdminsFor(repoName string) ([]string, error) {
+func (c *Client) AdminsFor(repoName string, ctx context.Context) ([]string, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
 	uri := apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin"
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
@@ -84,7 +88,9 @@ type NaisDeployment struct {
 	WorkflowFile string
 }
 
-func (c *Client) WhereIsItDeployed(repoName string) ([]NaisDeployment, error) {
+func (c *Client) WhereIsItDeployed(repoName string, ctx context.Context) ([]NaisDeployment, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		return nil, err
