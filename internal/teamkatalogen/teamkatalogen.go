@@ -1,14 +1,18 @@
 package teamkatalogen
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/navikt/whodis/internal/httpsupport"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var apiBaseURI = "http://team-catalog-backend.org"
 
-func DetailsForUser(email string) (*UserDetails, error) {
+func DetailsForUser(email string, ctx context.Context) (*UserDetails, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
 	resp, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI + "/member/membership/byUserEmail?email=" + email)
 	if err != nil {
 		return nil, err

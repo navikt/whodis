@@ -54,7 +54,7 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 	for _, admin := range repoAdmins {
 		go func() {
 			defer wg.Done()
-			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin))
+			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin), ctx)
 			if err != nil {
 				slog.Error("error getting repo admin details", slog.Any("error", err))
 				w.WriteHeader(http.StatusInternalServerError)
