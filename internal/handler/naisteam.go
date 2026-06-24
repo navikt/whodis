@@ -18,7 +18,7 @@ type NaisApi struct {
 var re = regexp.MustCompile(`^[a-zA-Z0-9æøåÆØÅ\-_]{1,50}$`)
 
 func (api *NaisApi) DetailsForTeam(w http.ResponseWriter, r *http.Request) {
-	ctx, span := api.Tracer.Start(r.Context(), "EmailForGitHubUser")
+	ctx, span := api.Tracer.Start(r.Context(), "DetailsForTeam")
 	defer span.End()
 	teamSlug := r.PathValue("teamSlug")
 	if !re.Match([]byte(teamSlug)) {
