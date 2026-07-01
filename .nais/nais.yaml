@@ -48,3 +48,4 @@ spec:
     inbound:
       rules:
         - application: tpt-graph
+        - application: secretsnotifier
