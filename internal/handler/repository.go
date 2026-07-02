@@ -52,8 +52,7 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if len(teams) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return
+		slog.Info("unable to find team in GitHub", slog.Any("repo", repoName))
 	}
 	var channels []string
 	for _, team := range teams {
@@ -71,15 +70,22 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 		if !slices.Contains(channels, naisTeamDetails.SlackChannel) {
 			channels = append(channels, naisTeamDetails.SlackChannel)
 		}
-		if len(channels) == 0 {
-			channelsFromTeamkatalogen, err := repo.allSlackChannelsForAllRepoAdminPeople(ctx, repoName)
-			if err != nil {
-				slog.Error("error getting channels for repo", slog.Any("error", err))
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			channels = append(channels, channelsFromTeamkatalogen...)
+	}
+	if len(channels) == 0 {
+		slog.Info("unable to find slack channels from GitHub team and nais, trying individuals and Teamkatalogen",
+			slog.Any("repo", repoName))
+		channelsFromTeamkatalogen, err := repo.allSlackChannelsForAllRepoAdminPeople(ctx, repoName)
+		if err != nil {
+			slog.Error("error getting channels for repo", slog.Any("error", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
+		channels = append(channels, channelsFromTeamkatalogen...)
+	}
+	if len(channels) == 0 {
+		slog.Info("unable to find Slack channel(s)", slog.Any("repo", repoName))
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 	if err := json.NewEncoder(w).Encode(channels); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
