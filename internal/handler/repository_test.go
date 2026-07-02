@@ -7,7 +7,7 @@ import (
 	"github.com/navikt/whodis/internal/teamkatalogen"
 )
 
-func TestExtractionOfUniqueTeamsAndSlackChannels(t *testing.T) {
+func TestExtractionOfUniqueSlackChannels(t *testing.T) {
 	fromTeamkatalogen := []teamkatalogen.UserDetails{
 		{
 			Teams: []teamkatalogen.Team{
@@ -35,11 +35,8 @@ func TestExtractionOfUniqueTeamsAndSlackChannels(t *testing.T) {
 		},
 	}
 
-	expected := &uniqueThings{
-		Teams:         []string{"team1", "team2", "team3"},
-		SlackChannels: []string{"ch1", "ch2", "ch3"},
-	}
-	actual := extractUnique(fromTeamkatalogen)
+	expected := []string{"ch1", "ch2", "ch3"}
+	actual := extractUniqueSlackChannels(fromTeamkatalogen)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
@@ -63,11 +60,8 @@ func TestSlackChannelsMayBeCommaSeparated(t *testing.T) {
 		},
 	}
 
-	expected := &uniqueThings{
-		Teams:         []string{"team1", "team2"},
-		SlackChannels: []string{"ch1", "ch2", "ch3"},
-	}
-	actual := extractUnique(fromTeamkatalogen)
+	expected := []string{"ch1", "ch2", "ch3"}
+	actual := extractUniqueSlackChannels(fromTeamkatalogen)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}
@@ -91,11 +85,8 @@ func TestSlackChannelsMayBeSpaceSeparated(t *testing.T) {
 		},
 	}
 
-	expected := &uniqueThings{
-		Teams:         []string{"team1", "team2"},
-		SlackChannels: []string{"ch1", "ch2", "ch3"},
-	}
-	actual := extractUnique(fromTeamkatalogen)
+	expected := []string{"ch1", "ch2", "ch3"}
+	actual := extractUniqueSlackChannels(fromTeamkatalogen)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
 	}

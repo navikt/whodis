@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 )
 
 type Repository struct {
@@ -39,49 +41,8 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (repo *Repository) AdminPeopleSummary(w http.ResponseWriter, r *http.Request) {
-	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForAdmins")
-	defer span.End()
-	repoName := r.PathValue("repoName")
-	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
-	if err != nil {
-		slog.Error("error getting repo admins", slog.Any("error", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	var allTeamkatalogenResponses []teamkatalogen.UserDetails
-	var wg sync.WaitGroup
-	wg.Add(len(repoAdmins))
-	var mu sync.Mutex
-	for _, admin := range repoAdmins {
-		go func() {
-			defer wg.Done()
-			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin), ctx)
-			if err != nil {
-				slog.Error("error getting repo admin details", slog.Any("error", err))
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			mu.Lock()
-			allTeamkatalogenResponses = append(allTeamkatalogenResponses, *teamkatalogenReponse)
-			mu.Unlock()
-		}()
-	}
-	wg.Wait()
-	unique := extractUnique(allTeamkatalogenResponses)
-	w.Header().Set("Content-Type", "application/json")
-	reply := TeamsForRepoAdminsReply{
-		Users:         repo.enrichWithEmails(repoAdmins),
-		Teams:         unique.Teams,
-		SlackChannels: unique.SlackChannels,
-	}
-	if err := json.NewEncoder(w).Encode(reply); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
 func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Request) {
-	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForRepo")
+	ctx, span := repo.Tracer.Start(r.Context(), "SlcakChannelsForRepo")
 	defer span.End()
 	repoName := r.PathValue("repoName")
 	teams, err := repo.GitHubClient.TeamsFor(repoName, ctx)
@@ -111,8 +72,13 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 			channels = append(channels, naisTeamDetails.SlackChannel)
 		}
 		if len(channels) == 0 {
-			w.WriteHeader(http.StatusNotFound)
-			return
+			channelsFromTeamkatalogen, err := repo.allSlackChannelsForAllRepoAdminPeople(ctx, repoName)
+			if err != nil {
+				slog.Error("error getting channels for repo", slog.Any("error", err))
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			channels = append(channels, channelsFromTeamkatalogen...)
 		}
 	}
 	if err := json.NewEncoder(w).Encode(channels); err != nil {
@@ -120,15 +86,39 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings {
-	var uniqueTeams []string
+func (repo *Repository) allSlackChannelsForAllRepoAdminPeople(ctx context.Context, repoName string) ([]string, error) {
+	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
+	if err != nil {
+		return nil, err
+	}
+	var allTeamkatalogenResponses []teamkatalogen.UserDetails
+	var eg errgroup.Group
+	var mu sync.Mutex
+	for _, admin := range repoAdmins {
+		eg.Go(func() error {
+			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin), ctx)
+			if err != nil {
+				return err
+			}
+			mu.Lock()
+			allTeamkatalogenResponses = append(allTeamkatalogenResponses, *teamkatalogenReponse)
+			mu.Unlock()
+			return nil
+		})
+	}
+	err = eg.Wait()
+	if err != nil {
+		return nil, err
+	}
+	uniqueSlackChannels := extractUniqueSlackChannels(allTeamkatalogenResponses)
+	return uniqueSlackChannels, nil
+}
+
+func extractUniqueSlackChannels(fromTeamkatalogen []teamkatalogen.UserDetails) []string {
 	var uniqueSlackChannels []string
 
 	for _, userDetails := range fromTeamkatalogen {
 		for _, team := range userDetails.Teams {
-			if !slices.Contains(uniqueTeams, team.Name) {
-				uniqueTeams = append(uniqueTeams, team.Name)
-			}
 			// Some teams put several Slack channels separated by
 			// space or comma i the field in Teamkatalogen
 			splittedSlackChannels := splitSlackChannels(team.SlackChannel)
@@ -139,10 +129,7 @@ func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings 
 			}
 		}
 	}
-	return &uniqueThings{
-		Teams:         uniqueTeams,
-		SlackChannels: uniqueSlackChannels,
-	}
+	return uniqueSlackChannels
 }
 
 func splitSlackChannels(raw string) []string {
@@ -161,24 +148,6 @@ func splitSlackChannels(raw string) []string {
 	}
 
 	return []string{raw}
-}
-
-func (repo *Repository) enrichWithEmails(usernames []string) []User {
-	var users []User
-	for _, username := range usernames {
-		if username != "" {
-			users = append(users, User{
-				Username: username,
-				Email:    repo.GitHubClient.EmailFor(username),
-			})
-		}
-	}
-	return users
-}
-
-type uniqueThings struct {
-	Teams         []string
-	SlackChannels []string
 }
 
 type TeamsForRepoAdminsReply struct {
