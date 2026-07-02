@@ -100,7 +100,7 @@ func (c *Client) TeamsFor(repoName string, ctx context.Context) ([]string, error
 	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
 		return nil, err
 	}
-	filtered := c.filterUnwanted(allRepoTeams.Names(), c.teamsToSkip)
+	filtered := c.filterUnwanted(allRepoTeams.Slugs(), c.teamsToSkip)
 	return filtered, nil
 }
 

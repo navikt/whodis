@@ -77,16 +77,16 @@ type usersResponse struct {
 }
 
 type teamResponse []struct {
-	Name       string `json:"name"`
+	Slug       string `json:"slug"`
 	Permission string `json:"permission"`
 }
 
-func (tr *teamResponse) Names() []string {
-	var names []string
+func (tr *teamResponse) Slugs() []string {
+	var slugs []string
 	for _, team := range *tr {
-		names = append(names, team.Name)
+		slugs = append(slugs, team.Slug)
 	}
-	return names
+	return slugs
 }
 
 type singleCommit struct {
