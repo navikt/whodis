@@ -39,7 +39,7 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (repo *Repository) AdminPeopleInfo(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) AdminPeopleSummary(w http.ResponseWriter, r *http.Request) {
 	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForAdmins")
 	defer span.End()
 	repoName := r.PathValue("repoName")
@@ -88,6 +88,10 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if len(teams) == 0 {
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	var channels []string
