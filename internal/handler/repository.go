@@ -10,12 +10,14 @@ import (
 	"sync"
 
 	"github.com/navikt/whodis/internal/github"
+	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type Repository struct {
 	GitHubClient *github.Client
+	NaisClient   *nais.Api
 	Tracer       trace.Tracer
 }
 
@@ -78,7 +80,7 @@ func (repo *Repository) AdminPeopleInfo(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (repo *Repository) TeamsForRepo(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Request) {
 	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForRepo")
 	defer span.End()
 	repoName := r.PathValue("repoName")
@@ -88,7 +90,23 @@ func (repo *Repository) TeamsForRepo(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if err := json.NewEncoder(w).Encode(teams); err != nil {
+	var channels []string
+	for _, team := range teams {
+		naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
+		if err != nil {
+			slog.Error("error getting channels repo", slog.Any("error", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if !slices.Contains(channels, naisTeamDetails.SlackChannel) {
+			channels = append(channels, naisTeamDetails.SlackChannel)
+		}
+		if len(channels) == 0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	}
+	if err := json.NewEncoder(w).Encode(channels); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
