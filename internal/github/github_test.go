@@ -35,7 +35,6 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 
 func TestFilteringOutOrgOwnersFromRepoAdmins(t *testing.T) {
 	client := Client{
-		pkPEM:     "yolo",
 		orgAdmins: []string{"orgadmin1", "orgadmin2"},
 	}
 	repoAdmins := []string{"repoadmin1", "repoadmin2", "orgadmin1", "orgadmin2"}
@@ -43,6 +42,18 @@ func TestFilteringOutOrgOwnersFromRepoAdmins(t *testing.T) {
 	actual := client.filterUnwanted(repoAdmins, client.orgAdmins)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Org admins should be filtered out: %v", actual)
+	}
+}
+
+func TestFilteringOutUnwantedTeams(t *testing.T) {
+	client := Client{
+		teamsToSkip: []string{"team2"},
+	}
+	allTeamsForRepo := []string{"team1", "team2", "team3"}
+	expected := []string{"team1", "team3"}
+	actual := client.filterUnwanted(allTeamsForRepo, client.teamsToSkip)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("Unwanted teams should be filtered out: %v", actual)
 	}
 }
 

@@ -100,6 +100,8 @@ func (c *Client) TeamsFor(repoName string, ctx context.Context) ([]string, error
 	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
 		return nil, err
 	}
+	fmt.Printf("%v\n", allRepoTeams)
+	fmt.Printf("%v\n", c.teamsToSkip)
 	filtered := c.filterUnwanted(allRepoTeams.Names(), c.teamsToSkip)
 	return filtered, nil
 }
