@@ -98,7 +98,12 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	for _, team := range teams {
 		naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
 		if err != nil {
-			slog.Error("error getting channels repo", slog.Any("error", err))
+			// Dodgy error handling, thanks GraphQL
+			if strings.Contains(err.Error(), "specified team was not found") {
+				slog.Info("team was not found in nais", slog.Any("team", team))
+				continue
+			}
+			slog.Error("error getting channels for repo", slog.Any("error", err))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}

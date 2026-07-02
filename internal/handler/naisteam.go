@@ -27,7 +27,7 @@ func (api *NaisApi) DetailsForTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	teamDetails, err := api.NaisClient.DetailsFor(teamSlug, ctx)
 	if err != nil {
-		slog.Error("error getting app details", slog.Any("error", err))
+		slog.Error("error getting team details", slog.Any("error", err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
