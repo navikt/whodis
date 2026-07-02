@@ -30,15 +30,17 @@ type Client struct {
 	installationTokenExpiry time.Time
 	orgUsers                map[string]string
 	orgAdmins               []string
+	teamsToSkip             []string
 }
 
-func New(appPrivateKeyPem, appClientId, appInstallationId string) *Client {
+func New(appPrivateKeyPem, appClientId, appInstallationId string, teamsToSkip []string) *Client {
 	c := &Client{
-		pkPEM:     appPrivateKeyPem,
-		clientId:  appClientId,
-		installId: appInstallationId,
-		orgUsers:  make(map[string]string),
-		orgAdmins: make([]string, 0),
+		pkPEM:       appPrivateKeyPem,
+		clientId:    appClientId,
+		installId:   appInstallationId,
+		orgUsers:    make(map[string]string),
+		orgAdmins:   make([]string, 0),
+		teamsToSkip: teamsToSkip,
 	}
 	go c.syncSemiStaticDataPeriodically()
 	return c
@@ -79,7 +81,27 @@ func (c *Client) AdminsFor(repoName string, ctx context.Context) ([]string, erro
 	for _, repoAdmin := range allRepoAdmins {
 		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
 	}
-	return c.filterOutOrgAdmins(repoAdminLogins), nil
+	return c.filterUnwanted(repoAdminLogins, c.orgAdmins), nil
+}
+
+func (c *Client) TeamsFor(repoName string, ctx context.Context) ([]string, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
+	uri := apiBaseURI + "/repos/navikt/" + repoName + "/teams"
+	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
+	if err != nil {
+		return nil, err
+	}
+	var allRepoTeams teamResponse
+	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
+		return nil, err
+	}
+	filtered := c.filterUnwanted(allRepoTeams.Names(), c.teamsToSkip)
+	return filtered, nil
 }
 
 type NaisDeployment struct {
@@ -259,11 +281,11 @@ func (c *Client) createExchangeToken() (string, error) {
 	return serialized, nil
 }
 
-func (c *Client) filterOutOrgAdmins(repoAdmins []string) []string {
+func (c *Client) filterUnwanted(orig []string, unwanted []string) []string {
 	var filtered []string
-	for _, repoAdmin := range repoAdmins {
-		if !slices.Contains(c.orgAdmins, repoAdmin) {
-			filtered = append(filtered, repoAdmin)
+	for _, o := range orig {
+		if !slices.Contains(unwanted, o) {
+			filtered = append(filtered, o)
 		}
 	}
 	return filtered

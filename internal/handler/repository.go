@@ -37,7 +37,7 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
+func (repo *Repository) AdminPeopleInfo(w http.ResponseWriter, r *http.Request) {
 	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForAdmins")
 	defer span.End()
 	repoName := r.PathValue("repoName")
@@ -74,6 +74,21 @@ func (repo *Repository) TeamsForAdmins(w http.ResponseWriter, r *http.Request) {
 		SlackChannels: unique.SlackChannels,
 	}
 	if err := json.NewEncoder(w).Encode(reply); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func (repo *Repository) TeamsForRepo(w http.ResponseWriter, r *http.Request) {
+	ctx, span := repo.Tracer.Start(r.Context(), "TeamsForRepo")
+	defer span.End()
+	repoName := r.PathValue("repoName")
+	teams, err := repo.GitHubClient.TeamsFor(repoName, ctx)
+	if err != nil {
+		slog.Error("error getting teams for repo", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(teams); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }

@@ -36,6 +36,8 @@ spec:
   env:
     - name: GIN_MODE
       value: release
+    - name: GITHUB_TEAMS_TO_SKIP
+      value: nais-billing,isoc,appsec,security-managers
   envFrom:
     - secret: whodis
   accessPolicy:

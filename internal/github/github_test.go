@@ -26,7 +26,7 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 	wd, _ := os.Getwd()
 	path := filepath.Join(wd, "..", "..", "testfiles", "private_key.pem")
 	data, _ := os.ReadFile(path)
-	client := New(string(data), "123", "321")
+	client := New(string(data), "123", "321", make([]string, 0))
 	token, err := client.createExchangeToken()
 	if err != nil || token == "" {
 		t.Fatalf("Error creating token: %v", err)
@@ -40,7 +40,7 @@ func TestFilteringOutOrgOwnersFromRepoAdmins(t *testing.T) {
 	}
 	repoAdmins := []string{"repoadmin1", "repoadmin2", "orgadmin1", "orgadmin2"}
 	expected := []string{"repoadmin1", "repoadmin2"}
-	actual := client.filterOutOrgAdmins(repoAdmins)
+	actual := client.filterUnwanted(repoAdmins, client.orgAdmins)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Org admins should be filtered out: %v", actual)
 	}

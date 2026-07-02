@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/navikt/whodis/internal/github"
@@ -28,6 +29,7 @@ type config struct {
 	AppClientID        string
 	AppInstallationID  string
 	NaisApiKeyLocation string
+	GitHubTeamsToSkip  []string
 }
 
 func New() (*App, error) {
@@ -35,7 +37,7 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID)
+	gh := github.New(config.AppPrivateKeyPem, config.AppClientID, config.AppInstallationID, config.GitHubTeamsToSkip)
 	naisClient := nais.New(config.NaisApiKeyLocation)
 
 	exporter, err := otlptracegrpc.New(context.Background())
@@ -112,6 +114,10 @@ func configFromEnv() (*config, error) {
 		AppClientID:        m["GITHUB_APP_CLIENT_ID"],
 		AppInstallationID:  m["GITHUB_APP_INSTALLATION_ID"],
 		NaisApiKeyLocation: m["NAIS_SERVICE_ACCOUNT_TOKEN_PATH"],
+	}
+	gitHubTeamsToSkip := os.Getenv("GITHUB_TEAMS_TO_SKIP")
+	if gitHubTeamsToSkip != "" {
+		conf.GitHubTeamsToSkip = strings.Split(m["GITHUB_TEAMS_TO_SKIP"], ",")
 	}
 	return conf, nil
 }

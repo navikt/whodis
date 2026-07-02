@@ -76,6 +76,19 @@ type usersResponse struct {
 	Login string `json:"login"`
 }
 
+type teamResponse []struct {
+	Name       string `json:"name"`
+	Permission string `json:"permission"`
+}
+
+func (tr *teamResponse) Names() []string {
+	var names []string
+	for _, team := range *tr {
+		names = append(names, team.Name)
+	}
+	return names
+}
+
 type singleCommit struct {
 	SHA string `json:"sha"`
 }
