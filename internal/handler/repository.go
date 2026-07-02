@@ -120,21 +120,6 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (repo *Repository) Deployments(w http.ResponseWriter, r *http.Request) {
-	ctx, span := repo.Tracer.Start(r.Context(), "Deployments")
-	defer span.End()
-	repoName := r.PathValue("repoName")
-	w.Header().Set("Content-Type", "application/json")
-	deployments, err := repo.GitHubClient.WhereIsItDeployed(repoName, ctx)
-	if err != nil {
-		slog.Error("error determining deployments", slog.Any("error", err))
-		deployments = []github.NaisDeployment{}
-	}
-	if err := json.NewEncoder(w).Encode(deployments); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
 func extractUnique(fromTeamkatalogen []teamkatalogen.UserDetails) *uniqueThings {
 	var uniqueTeams []string
 	var uniqueSlackChannels []string

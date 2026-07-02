@@ -88,20 +88,3 @@ func (tr *teamResponse) Slugs() []string {
 	}
 	return slugs
 }
-
-type singleCommit struct {
-	SHA string `json:"sha"`
-}
-
-type treeResponse struct {
-	Leafs []treeLeaf `json:"tree"`
-}
-
-type treeLeaf struct {
-	Path string `json:"path"`
-	Size int    `json:"size"`
-}
-
-type fileReadResponse struct {
-	ContentAsBase64 string `json:"content"`
-}

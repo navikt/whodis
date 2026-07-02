@@ -2,12 +2,9 @@ package github
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"maps"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +14,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/navikt/whodis/internal/httpsupport"
 	"go.opentelemetry.io/otel/trace"
-	"gopkg.in/yaml.v3"
 )
 
 var apiBaseURI = "https://api.github.com"
@@ -108,55 +104,6 @@ type NaisDeployment struct {
 	Cluster      string
 	Namespace    string
 	WorkflowFile string
-}
-
-func (c *Client) WhereIsItDeployed(repoName string, ctx context.Context) ([]NaisDeployment, error) {
-	span := trace.SpanFromContext(ctx)
-	defer span.End()
-	installationToken, err := c.retrieveAuthToken()
-	if err != nil {
-		return nil, err
-	}
-	commitHash, err := c.latestCommit(repoName, installationToken)
-	if err != nil {
-		return nil, err
-	}
-	allFiles, err := c.filesIn(repoName, commitHash, installationToken)
-	if err != nil {
-		return nil, err
-	}
-	workflowFiles := c.filterWorkflowFiles(allFiles)
-	workflowFileContents, err := c.getContentsIn(repoName, workflowFiles, installationToken)
-	if err != nil {
-		return nil, err
-	}
-	var naisDeployments []NaisDeployment
-	for wfFilePath, wfFileContents := range workflowFileContents {
-		var wf workflowFile
-		if err := yaml.Unmarshal([]byte(wfFileContents), &wf); err != nil {
-			return nil, fmt.Errorf("error unmarshalling workflow file: %v", err)
-		}
-		deployInfo := wf.deployInfo()
-		if deployInfo == nil || isTemplated(deployInfo.resource) || isTemplated(deployInfo.cluster) {
-			slog.Info("unable to figure out deploy info, probably because values are templated")
-			continue
-		}
-		pathToFirstNaisYaml := strings.Split(deployInfo.resource, ",")[0]
-		naisYamlContent, err := c.getContentsIn(repoName, []string{pathToFirstNaisYaml}, installationToken)
-		if err != nil {
-			return nil, err
-		}
-		var naisYaml naisYaml
-		if err = yaml.Unmarshal([]byte(naisYamlContent[pathToFirstNaisYaml]), &naisYaml); err != nil {
-			return nil, fmt.Errorf("error unmarshalling nais.yaml: %v", err)
-		}
-		naisDeployments = append(naisDeployments, NaisDeployment{
-			Cluster:      deployInfo.cluster,
-			WorkflowFile: wfFilePath,
-			Namespace:    naisYaml.Metadata.Namespace,
-		})
-	}
-	return naisDeployments, nil
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
@@ -291,98 +238,6 @@ func (c *Client) filterUnwanted(orig []string, unwanted []string) []string {
 	return filtered
 }
 
-func (c *Client) latestCommit(repo string, authToken string) (string, error) {
-	uri := apiBaseURI + "/repos/navikt/" + repo + "/commits"
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-	if err != nil {
-		return "", err
-	}
-	var commitResponse []singleCommit
-	if err := json.Unmarshal(respBody, &commitResponse); err != nil {
-		return "", err
-	}
-	return commitResponse[0].SHA, nil
-}
-
-func (c *Client) filesIn(repo string, commitSHA string, authToken string) ([]string, error) {
-	uri := apiBaseURI + "/repos/navikt/" + repo + "/git/trees/" + commitSHA + "?recursive=true"
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-	if err != nil {
-		return nil, fmt.Errorf("file listing request: %v", err)
-	}
-	var fileTree treeResponse
-	if err := json.Unmarshal(respBody, &fileTree); err != nil {
-		return nil, fmt.Errorf("unmarshal file listing response: %v", err)
-	}
-	var files []string
-	for _, leaf := range fileTree.Leafs {
-		files = append(files, leaf.Path)
-	}
-	return files, nil
-}
-
-func (c *Client) getContentsIn(repo string, files []string, authToken string) (map[string]string, error) {
-	slog.Info("Getting contents in files", slog.String("repo", repo), slog.Any("files", files))
-	var fileContents = make(map[string]string, len(files))
-	errs := make(chan error, 1)
-	fileBaseURI := apiBaseURI + "/repos/navikt/" + repo + "/contents/"
-	wg := sync.WaitGroup{}
-	for _, filePath := range files {
-		wg.Add(1)
-		go func(fp string, errChan chan error) {
-			defer wg.Done()
-			uri := fileBaseURI + "/" + fp
-			respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, authToken)
-			if err != nil {
-				errs <- err
-				return
-			}
-			var frr fileReadResponse
-			if err := json.Unmarshal(respBody, &frr); err != nil {
-				errChan <- err
-				return
-			}
-			fileTxt, err := c.extractTextFrom(frr)
-			if err != nil {
-				errs <- err
-				return
-			}
-			if err := json.Unmarshal(respBody, &frr); err != nil {
-				errChan <- err
-				return
-			}
-			fileContents[fp] = fileTxt
-		}(filePath, errs)
-	}
-	wg.Wait()
-	close(errs)
-	for err := range errs {
-		if err != nil {
-			return nil, err
-		}
-	}
-	return fileContents, nil
-}
-
-func (c *Client) extractTextFrom(resp fileReadResponse) (string, error) {
-	b64Content := strings.ReplaceAll(resp.ContentAsBase64, "\n", "")
-	decoded, err := base64.StdEncoding.DecodeString(b64Content)
-	if err != nil {
-		return "", fmt.Errorf("b64 decoding: %v", err)
-	}
-	return string(decoded), nil
-}
-
-func (c *Client) filterWorkflowFiles(allFiles []string) []string {
-	var filtered []string
-	for _, file := range allFiles {
-		if strings.HasPrefix(file, ".github/workflows/") {
-			filtered = append(filtered, file)
-		}
-	}
-	return filtered
-}
-
 func (c *Client) tokenShouldBeRefreshed(now time.Time) bool {
 	if c.installationToken == "" {
 		slog.Debug("No GitHub token present. time to get a new one")
@@ -393,43 +248,4 @@ func (c *Client) tokenShouldBeRefreshed(now time.Time) bool {
 	shouldRefresh := c.installationTokenExpiry.Before(in10Mins)
 	slog.Debug("Should GitHub token be refreshed?", slog.Bool("refresh", shouldRefresh))
 	return shouldRefresh
-}
-
-type deployInfo struct {
-	resource string
-	cluster  string
-}
-
-func (wff *workflowFile) deployInfo() *deployInfo {
-	for _, job := range wff.Jobs {
-		for _, step := range job.Steps {
-			if strings.HasPrefix(step.Uses, "nais/deploy/actions/deploy") {
-				return &deployInfo{
-					cluster:  step.Env["CLUSTER"],
-					resource: step.Env["RESOURCE"],
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func isTemplated(str string) bool {
-	match, _ := regexp.MatchString("([{}]+)", str)
-	return match
-}
-
-type workflowFile struct {
-	Jobs map[string]struct {
-		Steps []struct {
-			Uses string            `json:"uses"`
-			Env  map[string]string `json:"env"`
-		}
-	}
-}
-
-type naisYaml struct {
-	Metadata struct {
-		Namespace string `yaml:"namespace"`
-	}
 }
