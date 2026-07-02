@@ -117,7 +117,7 @@ func configFromEnv() (*config, error) {
 	}
 	gitHubTeamsToSkip := os.Getenv("GITHUB_TEAMS_TO_SKIP")
 	if gitHubTeamsToSkip != "" {
-		conf.GitHubTeamsToSkip = strings.Split(m["GITHUB_TEAMS_TO_SKIP"], ",")
+		conf.GitHubTeamsToSkip = strings.Split(gitHubTeamsToSkip, ",")
 	}
 	return conf, nil
 }
