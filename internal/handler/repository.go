@@ -82,7 +82,9 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 					return nil
 				}
 				for _, t := range details.Teams {
-					addId(t.Id)
+					if t.IsActive() {
+						addId(t.Id)
+					}
 				}
 			}
 			return nil
@@ -108,7 +110,9 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 				return nil
 			}
 			for _, t := range details.Teams {
-				addId(t.Id)
+				if t.IsActive() {
+					addId(t.Id)
+				}
 			}
 			return nil
 		})

@@ -33,4 +33,9 @@ type Team struct {
 	Name         string   `json:"name"`
 	SlackChannel string   `json:"slackChannel"`
 	NaisTeams    []string `json:"naisTeams"`
+	Status       string   `json:"status"`
+}
+
+func (t Team) IsActive() bool {
+	return t.Status != "INACTIVE"
 }
