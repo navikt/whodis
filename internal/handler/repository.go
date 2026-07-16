@@ -41,6 +41,100 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	}
 }
 
+func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
+	ctx, span := repo.Tracer.Start(r.Context(), "OwnersForRepo")
+	defer span.End()
+	repoName := r.PathValue("repoName")
+
+	var mu sync.Mutex
+	var eg errgroup.Group
+	uniqueIds := make(map[string]struct{})
+
+	addId := func(id string) {
+		if id == "" {
+			return
+		}
+		mu.Lock()
+		uniqueIds[id] = struct{}{}
+		mu.Unlock()
+	}
+
+	// Path 1: GitHub teams with admin access → Nais members → Teamkatalogen
+	teams, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
+	if err != nil {
+		slog.Error("error getting teams for repo", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	for _, team := range teams {
+		eg.Go(func() error {
+			naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
+			if err != nil {
+				if strings.Contains(err.Error(), "specified team was not found") {
+					return nil
+				}
+				return err
+			}
+			for _, member := range naisTeamDetails.Members {
+				details, err := teamkatalogen.DetailsForUser(member.Email, ctx)
+				if err != nil {
+					slog.Warn("error getting teamkatalogen details for member", slog.Any("error", err))
+					return nil
+				}
+				for _, t := range details.Teams {
+					addId(t.Id)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Path 2: Individual admin collaborators → Teamkatalogen
+	admins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
+	if err != nil {
+		slog.Error("error getting admins for repo", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	for _, admin := range admins {
+		eg.Go(func() error {
+			email := repo.GitHubClient.EmailFor(admin)
+			if email == "" {
+				return nil
+			}
+			details, err := teamkatalogen.DetailsForUser(email, ctx)
+			if err != nil {
+				slog.Warn("error getting teamkatalogen details for admin", slog.Any("error", err))
+				return nil
+			}
+			for _, t := range details.Teams {
+				addId(t.Id)
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		slog.Error("error resolving owners for repo", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	ids := make([]string, 0, len(uniqueIds))
+	for id := range uniqueIds {
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if err := json.NewEncoder(w).Encode(ids); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
 func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Request) {
 	ctx, span := repo.Tracer.Start(r.Context(), "SlcakChannelsForRepo")
 	defer span.End()

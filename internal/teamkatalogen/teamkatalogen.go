@@ -29,6 +29,7 @@ type UserDetails struct {
 }
 
 type Team struct {
+	Id           string   `json:"id"`
 	Name         string   `json:"name"`
 	SlackChannel string   `json:"slackChannel"`
 	NaisTeams    []string `json:"naisTeams"`

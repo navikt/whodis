@@ -100,6 +100,26 @@ func (c *Client) TeamsFor(repoName string, ctx context.Context) ([]string, error
 	return filtered, nil
 }
 
+func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
+	uri := apiBaseURI + "/repos/navikt/" + repoName + "/teams"
+	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
+	if err != nil {
+		return nil, err
+	}
+	var allRepoTeams teamResponse
+	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
+		return nil, err
+	}
+	filtered := c.filterUnwanted(allRepoTeams.AdminSlugs(), c.teamsToSkip)
+	return filtered, nil
+}
+
 type NaisDeployment struct {
 	Cluster      string
 	Namespace    string

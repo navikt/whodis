@@ -88,3 +88,13 @@ func (tr *teamResponse) Slugs() []string {
 	}
 	return slugs
 }
+
+func (tr *teamResponse) AdminSlugs() []string {
+	var slugs []string
+	for _, team := range *tr {
+		if team.Permission == "admin" {
+			slugs = append(slugs, team.Slug)
+		}
+	}
+	return slugs
+}
