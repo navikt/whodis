@@ -51,3 +51,4 @@ spec:
       rules:
         - application: tpt-graph
         - application: secretsnotifier
+        - application: github-cost-center
