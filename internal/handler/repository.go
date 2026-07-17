@@ -63,7 +63,12 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 	teams, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
-		w.WriteHeader(http.StatusInternalServerError)
+		// Dirty tricks
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "404") {
+			status = http.StatusNotFound
+		}
+		w.WriteHeader(status)
 		return
 	}
 	for _, team := range teams {
@@ -146,7 +151,12 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	teams, err := repo.GitHubClient.TeamsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
-		w.WriteHeader(http.StatusInternalServerError)
+		// Dirty tricks
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "404") {
+			status = http.StatusNotFound
+		}
+		w.WriteHeader(status)
 		return
 	}
 	if len(teams) == 0 {
