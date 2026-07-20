@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/navikt/whodis/internal/github"
+	"github.com/navikt/whodis/internal/httpsupport"
 	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
 	"go.opentelemetry.io/otel/trace"
@@ -22,6 +24,8 @@ type Repository struct {
 	NaisClient   *nais.Api
 	Tracer       trace.Tracer
 }
+
+var notFoundError = &httpsupport.HttpError{Code: 404}
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
 	_, span := repo.Tracer.Start(r.Context(), "EmailForGitHubUser")
@@ -63,9 +67,8 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 	teams, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
-		// Dirty tricks
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "404") {
+		if errors.Is(err, notFoundError) {
 			status = http.StatusNotFound
 		}
 		w.WriteHeader(status)
@@ -151,9 +154,8 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	teams, err := repo.GitHubClient.TeamsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
-		// Dirty tricks
 		status := http.StatusInternalServerError
-		if strings.Contains(err.Error(), "404") {
+		if errors.Is(err, notFoundError) {
 			status = http.StatusNotFound
 		}
 		w.WriteHeader(status)

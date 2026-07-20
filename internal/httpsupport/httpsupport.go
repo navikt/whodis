@@ -11,6 +11,14 @@ import (
 
 var client = http.Client{}
 
+type HttpError struct {
+	Code int
+}
+
+func (e *HttpError) Error() string {
+	return fmt.Sprintf("HTTP request failed: %d", e.Code)
+}
+
 func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
 	resp, err := http.Get(uri)
 	if err != nil {
@@ -18,7 +26,7 @@ func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GET request to %s failed with status %d", uri, resp.StatusCode)
+		return nil, &HttpError{resp.StatusCode}
 	}
 	return readResponse(resp)
 }
@@ -38,7 +46,7 @@ func MakeAuthenticatedGetRequest(uri, authToken string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GET request to %s failed with status %d", uri, resp.StatusCode)
+		return nil, &HttpError{resp.StatusCode}
 	}
 	return readResponse(resp)
 }
@@ -59,11 +67,7 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		resBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("expected a 200-series status from %s, got %d (%s)", uri, resp.StatusCode, resBody)
+		return nil, &HttpError{resp.StatusCode}
 	}
 	resBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -80,7 +84,7 @@ func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error)
 		return new(T), err
 	}
 	if isError(resBody) {
-		return new(T), fmt.Errorf("error making GraphQL request: %s", resBody)
+		return new(T), &HttpError{500}
 	}
 	var deserialized T
 	if err = json.Unmarshal(resBody, &deserialized); err != nil {
