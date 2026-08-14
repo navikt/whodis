@@ -61,17 +61,20 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(owners) != 0 {
+		slog.Info("found owners", slog.Any("owners", owners), slog.Any("repo", repoName))
 		if err := json.NewEncoder(w).Encode(owners); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 		return
 	}
 
+	slog.Info("no owners found on github, keep looking", slog.Any("owners", owners), slog.Any("repo", repoName))
 	owners, err = repo.ownerTeamsForRepoByAssociation(repoName, ctx)
 	if err != nil {
 		handlePossible404(err, w)
 		return
 	}
+	slog.Info("found owners", slog.Any("owners", owners), slog.Any("repo", repoName))
 	if err := json.NewEncoder(w).Encode(owners); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}

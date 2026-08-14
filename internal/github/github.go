@@ -91,7 +91,6 @@ func (c *Client) allTeamsForRepo(repoName string, ctx context.Context) (teamResp
 	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
 		return nil, err
 	}
-	slog.Info("found teams", slog.Any("teams", allRepoTeams))
 	return allRepoTeams, nil
 }
 
