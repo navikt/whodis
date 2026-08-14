@@ -62,7 +62,6 @@ func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("all teams", slog.Any("allteams", allTeams.AllSlugs()))
 	adminSlugsMinusOrgAdmins := c.filterUnwanted(allTeams.AdminOnlySlugs(), c.teamsToSkip)
 	return adminSlugsMinusOrgAdmins, nil
 }

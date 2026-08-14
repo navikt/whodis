@@ -55,13 +55,12 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	}
 	ctx, span := repo.Tracer.Start(r.Context(), "OwnerTeamsForRepo")
 	defer span.End()
-	owners, err := repo.ownerTeamsForRepoGitHubOnly(repoName, ctx)
+	owners, err := repo.ownerTeamsForRepo(repoName, ctx)
 	if err != nil {
 		handlePossible404(err, w)
 		return
 	}
 	if len(owners) != 0 {
-		slog.Info("found owners", slog.Any("owners", owners), slog.Any("repo", repoName))
 		if err := json.NewEncoder(w).Encode(owners); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
@@ -69,7 +68,7 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	}
 
 	slog.Info("no owners found on github, keep looking", slog.Any("owners", owners), slog.Any("repo", repoName))
-	owners, err = repo.ownerTeamsForRepoByAssociation(repoName, ctx)
+	owners, err = repo.allTeamsForRepo(repoName, ctx)
 	if err != nil {
 		handlePossible404(err, w)
 		return
@@ -89,7 +88,7 @@ func handlePossible404(err error, w http.ResponseWriter) {
 	w.WriteHeader(status)
 }
 
-func (repo *Repository) ownerTeamsForRepoGitHubOnly(repoName string, ctx context.Context) ([]string, error) {
+func (repo *Repository) ownerTeamsForRepo(repoName string, ctx context.Context) ([]string, error) {
 	owners, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
 	if err != nil {
 		return nil, err
@@ -98,41 +97,13 @@ func (repo *Repository) ownerTeamsForRepoGitHubOnly(repoName string, ctx context
 	return owners, nil
 }
 
-func (repo *Repository) ownerTeamsForRepoByAssociation(repoName string, ctx context.Context) ([]string, error) {
+func (repo *Repository) allTeamsForRepo(repoName string, ctx context.Context) ([]string, error) {
 	allTeams, err := repo.GitHubClient.AllTeamsFor(repoName, ctx)
 	if err != nil {
 		return nil, err
 	}
-	var mu sync.Mutex
-	var eg errgroup.Group
-	var owners []string
-	for _, admin := range allTeams {
-		eg.Go(func() error {
-			email := repo.GitHubClient.EmailFor(admin)
-			if email == "" {
-				return nil
-			}
-			details, err := teamkatalogen.DetailsForUser(email, ctx)
-			if err != nil {
-				slog.Warn("error getting teamkatalogen details for admin", slog.Any("error", err))
-				return nil
-			}
-			for _, t := range details.Teams {
-				if t.IsActive() {
-					mu.Lock()
-					owners = append(owners, t.Name)
-					mu.Unlock()
-				}
-			}
-			return nil
-		})
-	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-
-	return owners, nil
+	return allTeams, nil
 }
 
 func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Request) {

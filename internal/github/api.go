@@ -1,7 +1,5 @@
 package github
 
-import "log/slog"
-
 var samlUsersQuery = `query {
   organization(login: \"navikt\") {
     samlIdentityProvider {
@@ -94,7 +92,6 @@ func (tr *teamResponse) AllSlugs() []string {
 func (tr *teamResponse) AdminOnlySlugs() []string {
 	var slugs []string
 	for _, team := range *tr {
-		slog.Info("filtering slugs", slog.String("slug", team.Slug), slog.String("permission", team.Permission))
 		if team.Permission == "admin" {
 			slugs = append(slugs, team.Slug)
 		}
