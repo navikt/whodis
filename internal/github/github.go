@@ -57,50 +57,25 @@ func (c *Client) EmailFor(username string) string {
 	return c.orgUsers[username]
 }
 
-func (c *Client) AdminsFor(repoName string, ctx context.Context) ([]string, error) {
-	span := trace.SpanFromContext(ctx)
-	defer span.End()
-	uri := apiBaseURI + "/repos/navikt/" + repoName + "/collaborators?permission=admin"
-	installationToken, err := c.retrieveAuthToken()
-	if err != nil {
-		return nil, err
-	}
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
-	if err != nil {
-		return nil, err
-	}
-	var allRepoAdmins []usersResponse
-	if err := json.Unmarshal(respBody, &allRepoAdmins); err != nil {
-		return nil, err
-	}
-	var repoAdminLogins []string
-	for _, repoAdmin := range allRepoAdmins {
-		repoAdminLogins = append(repoAdminLogins, repoAdmin.Login)
-	}
-	return c.filterUnwanted(repoAdminLogins, c.orgAdmins), nil
-}
-
-func (c *Client) TeamsFor(repoName string, ctx context.Context) ([]string, error) {
-	span := trace.SpanFromContext(ctx)
-	defer span.End()
-	uri := apiBaseURI + "/repos/navikt/" + repoName + "/teams"
-	installationToken, err := c.retrieveAuthToken()
-	if err != nil {
-		return nil, err
-	}
-	respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
-	if err != nil {
-		return nil, err
-	}
-	var allRepoTeams teamResponse
-	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
-		return nil, err
-	}
-	filtered := c.filterUnwanted(allRepoTeams.Slugs(), c.teamsToSkip)
-	return filtered, nil
-}
-
 func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, error) {
+	allTeams, err := c.allTeamsForRepo(repoName, ctx)
+	if err != nil {
+		return nil, err
+	}
+	adminSlugsMinusOrgAdmins := c.filterUnwanted(allTeams.AdminOnlySlugs(), c.teamsToSkip)
+	return adminSlugsMinusOrgAdmins, nil
+}
+
+func (c *Client) AllTeamsFor(repoName string, ctx context.Context) ([]string, error) {
+	allTeams, err := c.allTeamsForRepo(repoName, ctx)
+	if err != nil {
+		return nil, err
+	}
+	allSlugsMinusOrgAdmins := c.filterUnwanted(allTeams.AllSlugs(), c.teamsToSkip)
+	return allSlugsMinusOrgAdmins, nil
+}
+
+func (c *Client) allTeamsForRepo(repoName string, ctx context.Context) (teamResponse, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
 	uri := apiBaseURI + "/repos/navikt/" + repoName + "/teams"
@@ -116,8 +91,7 @@ func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, 
 	if err := json.Unmarshal(respBody, &allRepoTeams); err != nil {
 		return nil, err
 	}
-	filtered := c.filterUnwanted(allRepoTeams.AdminSlugs(), c.teamsToSkip)
-	return filtered, nil
+	return allRepoTeams, nil
 }
 
 type NaisDeployment struct {

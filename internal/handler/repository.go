@@ -27,6 +27,8 @@ type Repository struct {
 
 var notFoundError = &httpsupport.HttpError{Code: 404}
 
+var repoNameRegex = regexp.MustCompile(`^[a-zA-Z0-9æøåÆØÅ\-_]{1,50}$`)
+
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
 	_, span := repo.Tracer.Start(r.Context(), "EmailForGitHubUser")
 	defer span.End()
@@ -45,68 +47,63 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
-	ctx, span := repo.Tracer.Start(r.Context(), "OwnersForRepo")
-	defer span.End()
+func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request) {
 	repoName := r.PathValue("repoName")
+	if !repoNameRegex.Match([]byte(repoName)) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	ctx, span := repo.Tracer.Start(r.Context(), "OwnerTeamsForRepo")
+	defer span.End()
+	owners, err := repo.ownerTeamsForRepoGitHubOnly(repoName, ctx)
+	if err != nil {
+		handlePossible404(err, w)
+		return
+	}
+	if len(owners) != 0 {
+		if err := json.NewEncoder(w).Encode(owners); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		return
+	}
 
+	owners, err = repo.ownerTeamsForRepoByAssociation(repoName, ctx)
+	if err != nil {
+		handlePossible404(err, w)
+		return
+	}
+	if err := json.NewEncoder(w).Encode(owners); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func handlePossible404(err error, w http.ResponseWriter) {
+	slog.Error("error getting owners for repo", slog.Any("error", err))
+	status := http.StatusInternalServerError
+	if errors.Is(err, notFoundError) {
+		status = http.StatusNotFound
+	}
+	w.WriteHeader(status)
+}
+
+func (repo *Repository) ownerTeamsForRepoGitHubOnly(repoName string, ctx context.Context) ([]string, error) {
+	owners, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return owners, nil
+}
+
+func (repo *Repository) ownerTeamsForRepoByAssociation(repoName string, ctx context.Context) ([]string, error) {
+	allTeams, err := repo.GitHubClient.AllTeamsFor(repoName, ctx)
+	if err != nil {
+		return nil, err
+	}
 	var mu sync.Mutex
 	var eg errgroup.Group
-	uniqueIds := make(map[string]struct{})
-
-	addId := func(id string) {
-		if id == "" {
-			return
-		}
-		mu.Lock()
-		uniqueIds[id] = struct{}{}
-		mu.Unlock()
-	}
-
-	// Path 1: GitHub teams with admin access → Nais members → Teamkatalogen
-	teams, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
-	if err != nil {
-		slog.Error("error getting teams for repo", slog.Any("error", err))
-		status := http.StatusInternalServerError
-		if errors.Is(err, notFoundError) {
-			status = http.StatusNotFound
-		}
-		w.WriteHeader(status)
-		return
-	}
-	for _, team := range teams {
-		eg.Go(func() error {
-			naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
-			if err != nil {
-				if strings.Contains(err.Error(), "specified team was not found") {
-					return nil
-				}
-				return err
-			}
-			for _, member := range naisTeamDetails.Members {
-				details, err := teamkatalogen.DetailsForUser(member.Email, ctx)
-				if err != nil {
-					slog.Warn("error getting teamkatalogen details for member", slog.Any("error", err))
-					return nil
-				}
-				for _, t := range details.Teams {
-					if t.IsActive() {
-						addId(t.Id)
-					}
-				}
-			}
-			return nil
-		})
-	}
-
-	// Path 2: Individual admin collaborators → Teamkatalogen
-	admins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
-	if err != nil {
-		slog.Error("error getting admins for repo", slog.Any("error", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	for _, admin := range admins {
+	var owners []string
+	for _, admin := range allTeams {
 		eg.Go(func() error {
 			email := repo.GitHubClient.EmailFor(admin)
 			if email == "" {
@@ -119,7 +116,9 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, t := range details.Teams {
 				if t.IsActive() {
-					addId(t.Id)
+					mu.Lock()
+					owners = append(owners, t.Name)
+					mu.Unlock()
 				}
 			}
 			return nil
@@ -127,31 +126,17 @@ func (repo *Repository) OwnersForRepo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := eg.Wait(); err != nil {
-		slog.Error("error resolving owners for repo", slog.Any("error", err))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
-	ids := make([]string, 0, len(uniqueIds))
-	for id := range uniqueIds {
-		ids = append(ids, id)
-	}
-
-	if len(ids) == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(ids); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	return owners, nil
 }
 
 func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Request) {
 	ctx, span := repo.Tracer.Start(r.Context(), "SlcakChannelsForRepo")
 	defer span.End()
 	repoName := r.PathValue("repoName")
-	teams, err := repo.GitHubClient.TeamsFor(repoName, ctx)
+	teams, err := repo.GitHubClient.AllTeamsFor(repoName, ctx)
 	if err != nil {
 		slog.Error("error getting teams for repo", slog.Any("error", err))
 		status := http.StatusInternalServerError
@@ -203,7 +188,7 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 }
 
 func (repo *Repository) allSlackChannelsForAllRepoAdminPeople(ctx context.Context, repoName string) ([]string, error) {
-	repoAdmins, err := repo.GitHubClient.AdminsFor(repoName, ctx)
+	repoAdmins, err := repo.GitHubClient.AdminTeamsFor(repoName, ctx)
 	if err != nil {
 		return nil, err
 	}
