@@ -48,6 +48,7 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 }
 
 func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	repoName := r.PathValue("repoName")
 	if !repoNameRegex.Match([]byte(repoName)) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -74,7 +75,6 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(owners); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
