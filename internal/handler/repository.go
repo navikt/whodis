@@ -74,6 +74,7 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(owners); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
