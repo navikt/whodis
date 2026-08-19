@@ -6,18 +6,18 @@ A Go service that resolves ownership for GitHub repositories and NAIS teams at N
 
 No authentication required.
 
-### `GET /repository/{repoName}`
+### `GET /repository/{repoName}/owners`
 
-Returns a list of Teamkatalogen team IDs that own the repository. A team is considered an owner if it contains members with admin access to the GitHub repo.
+Returns a list of GitHub team slugs that own the repository. Admin teams are checked first; if none are found, all teams with access are returned.
 
 ```
-GET /repository/appsec-guide
+GET /repository/appsec-guide/owners
 ```
 
 ```json
 [
-  "02ed767d-ce01-49b5-9350-ee4c984fd78f",
-  "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  "appsec",
+  "nais"
 ]
 ```
 
