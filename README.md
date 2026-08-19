@@ -81,6 +81,23 @@ GET /nais/appsec
 
 ---
 
+### `GET /nais/{teamSlug}/repositories`
+
+Returns a list of GitHub repositories owned by the given NAIS team. Repository names are in `nameWithOwner` format. Returns `404` if the team does not exist or has no repositories.
+
+```
+GET /nais/appsec/repositories
+```
+
+```json
+[
+  "navikt/repo-one",
+  "navikt/repo-two"
+]
+```
+
+---
+
 ## Development
 
 **Prerequisites:** Go 1.26+ (or use [mise](https://mise.jdx.dev/) — `mise install` will set up the correct version).

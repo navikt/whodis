@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -92,6 +93,38 @@ func (c *Client) allTeamsForRepo(repoName string, ctx context.Context) (teamResp
 		return nil, err
 	}
 	return allRepoTeams, nil
+}
+
+func (c *Client) ReposForTeam(teamSlug string, ctx context.Context) ([]string, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
+	installationToken, err := c.retrieveAuthToken()
+	if err != nil {
+		return nil, err
+	}
+	var repos []string
+	page := 1
+	for {
+		uri := fmt.Sprintf("%s/orgs/navikt/teams/%s/repos?per_page=100&page=%d", apiBaseURI, teamSlug, page)
+		respBody, err := httpsupport.MakeAuthenticatedGetRequest(uri, installationToken)
+		if err != nil {
+			return nil, err
+		}
+		var batch []struct {
+			FullName string `json:"full_name"`
+		}
+		if err := json.Unmarshal(respBody, &batch); err != nil {
+			return nil, err
+		}
+		for _, r := range batch {
+			repos = append(repos, r.FullName)
+		}
+		if len(batch) < 100 {
+			break
+		}
+		page++
+	}
+	return repos, nil
 }
 
 type NaisDeployment struct {

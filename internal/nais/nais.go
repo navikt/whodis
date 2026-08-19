@@ -2,12 +2,15 @@ package nais
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 
 	"github.com/navikt/whodis/internal/httpsupport"
 	"go.opentelemetry.io/otel/trace"
 )
+
+var ErrTeamNotFound = errors.New("team not found")
 
 var naisApiBaseUrl = "https://console.nav.cloud.nais.io/graphql"
 
@@ -32,6 +35,75 @@ func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, 
 		return nil, err
 	}
 	return resp.asTeam(), nil
+}
+
+func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string, error) {
+	span := trace.SpanFromContext(ctx)
+	defer span.End()
+	token, err := api.loadNaisApiToken()
+	if err != nil {
+		return nil, err
+	}
+
+	var repos []string
+	var cursor string
+	for {
+		query := buildRepoQuery(teamSlug, cursor)
+		resp, err := httpsupport.MakeGqlQuery[repoQueryResponse](naisApiBaseUrl, token, query)
+		if err != nil {
+			var gqlErr *httpsupport.GqlError
+			if errors.As(err, &gqlErr) && strings.Contains(strings.ToLower(gqlErr.Message), "not found") {
+				return nil, ErrTeamNotFound
+			}
+			return nil, err
+		}
+		teamData := resp.Data.Team
+		if teamData.Slug == "" {
+			return nil, nil
+		}
+		for _, node := range teamData.Repositories.Nodes {
+			repos = append(repos, node.Name)
+		}
+		pageInfo := teamData.Repositories.PageInfo
+		if !pageInfo.HasNextPage {
+			break
+		}
+		cursor = pageInfo.EndCursor
+	}
+	return repos, nil
+}
+
+func buildRepoQuery(teamSlug, cursor string) string {
+	afterArg := ""
+	if cursor != "" {
+		afterArg = `, after: \"` + cursor + `\"`
+	}
+	return `query {
+       team(slug:\"` + teamSlug + `\") {
+          slug
+          repositories(first: 100` + afterArg + `) {
+             nodes { name }
+             pageInfo { hasNextPage endCursor }
+          }
+       }
+    }`
+}
+
+type repoQueryResponse struct {
+	Data struct {
+		Team struct {
+			Slug         string `json:"slug"`
+			Repositories struct {
+				Nodes []struct {
+					Name string `json:"name"`
+				} `json:"nodes"`
+				PageInfo struct {
+					HasNextPage bool   `json:"hasNextPage"`
+					EndCursor   string `json:"endCursor"`
+				} `json:"pageInfo"`
+			} `json:"repositories"`
+		} `json:"team"`
+	} `json:"data"`
 }
 
 func (api *Api) loadNaisApiToken() (string, error) {

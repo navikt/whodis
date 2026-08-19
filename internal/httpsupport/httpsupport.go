@@ -83,8 +83,8 @@ func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error)
 	if err != nil {
 		return new(T), err
 	}
-	if isError(resBody) {
-		return new(T), &HttpError{500}
+	if gqlErr := gqlError(resBody); gqlErr != nil {
+		return new(T), gqlErr
 	}
 	var deserialized T
 	if err = json.Unmarshal(resBody, &deserialized); err != nil {
@@ -93,16 +93,29 @@ func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error)
 	return &deserialized, nil
 }
 
-type ErrorResponse struct {
-	Errors []struct{} `json:"errors"`
+type GqlError struct {
+	Message string
 }
 
-func isError(responseBody []byte) bool {
-	var rawResponse ErrorResponse
-	if err := json.Unmarshal(responseBody, &rawResponse); err != nil {
-		return true
+func (e *GqlError) Error() string {
+	return e.Message
+}
+
+type errorResponse struct {
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+func gqlError(responseBody []byte) error {
+	var raw errorResponse
+	if err := json.Unmarshal(responseBody, &raw); err != nil {
+		return &GqlError{Message: "failed to parse GraphQL response"}
 	}
-	return len(rawResponse.Errors) > 0
+	if len(raw.Errors) > 0 {
+		return &GqlError{Message: raw.Errors[0].Message}
+	}
+	return nil
 }
 
 func readResponse(resp *http.Response) ([]byte, error) {

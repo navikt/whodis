@@ -68,8 +68,9 @@ func (a *App) loadBusinessRoutes(router chi.Router) {
 		Tracer:       a.tracer,
 	}
 	naisApiHandler := handler.NaisApi{
-		NaisClient: a.nais,
-		Tracer:     a.tracer,
+		NaisClient:   a.nais,
+		GitHubClient: a.ghClient,
+		Tracer:       a.tracer,
 	}
 
 	router.Group(func(r chi.Router) {
@@ -77,5 +78,6 @@ func (a *App) loadBusinessRoutes(router chi.Router) {
 		r.Get("/repository/{repoName}/owners", repoHandler.OwnerTeamsForRepo)
 		r.Get("/repository/{repoName}/slackchannels", repoHandler.SlackChannelsForRepo)
 		r.Get("/nais/{teamSlug}", naisApiHandler.DetailsForTeam)
+		r.Get("/nais/{teamSlug}/repositories", naisApiHandler.RepositoriesForTeam)
 	})
 }
