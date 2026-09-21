@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/go-chi/chi/v5 v5.3.2
-	github.com/go-chi/httplog/v3 v3.4.0
+	github.com/go-chi/httplog/v3 v3.5.0
 	github.com/go-chi/metrics v0.1.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
