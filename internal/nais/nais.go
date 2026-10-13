@@ -3,7 +3,9 @@ package nais
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/navikt/whodis/internal/httpsupport"
@@ -107,6 +109,11 @@ type repoQueryResponse struct {
 }
 
 func (api *Api) loadNaisApiToken() (string, error) {
+	for _, seg := range strings.Split(filepath.ToSlash(api.apiKeyLocation), "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("invalid file path")
+		}
+	}
 	fileContents, err := os.ReadFile(api.apiKeyLocation)
 	if err != nil {
 		return "", err
