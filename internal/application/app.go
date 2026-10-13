@@ -61,8 +61,9 @@ func New() (*App, error) {
 
 func (a *App) Start(ctx context.Context) error {
 	server := &http.Server{
-		Addr:    ":8080",
-		Handler: a.router,
+		Addr:        ":8080",
+		Handler:     a.router,
+		ReadTimeout: 5 * time.Second,
 	}
 
 	slog.Info("Starting server")
