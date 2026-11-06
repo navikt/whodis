@@ -8,7 +8,7 @@ workflows:
     '.github/workflows/main.yaml':
         - 'actions/checkout@v7.0.1'
         - 'docker/setup-qemu-action@v4.4.0'
-        - 'nais/deploy@v2'
+        - 'nais/deploy@v3'
         - 'nais/docker-build-push@main'
 dependencies:
     'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae':
@@ -92,11 +92,13 @@ dependencies:
             - 'aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25'
             - 'oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d'
             - 'sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6'
-    'nais/deploy@v2':
-        ref: 'v2'
-        commit: 'sha1-7ad7c2b833e1db74a80954e3ee6bb6ac060a8ae7'
+    'nais/deploy@v3':
+        ref: 'v3'
+        commit: 'sha1-6a9dcd6df697ec2d38edc78cadb0b9acd1232f50'
         owner_id: 29488289
         repo_id: 166402203
+        uses:
+            - 'nais/setup@fb8692f65df9c904e2cdac5d395630ac876abdcf'
     'nais/docker-build-push@main':
         ref: 'main'
         commit: 'sha1-bfe52e3ad6d0e96fd1056a03acb7b619aaffb39d'
@@ -116,6 +118,11 @@ dependencies:
             - 'docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121'
             - 'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd'
             - 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
+    'nais/setup@fb8692f65df9c904e2cdac5d395630ac876abdcf':
+        ref: 'v1.0.3'
+        commit: 'sha1-fb8692f65df9c904e2cdac5d395630ac876abdcf'
+        owner_id: 29488289
+        repo_id: 1048418871
     'navikt/automerge-dependabot@v1.5':
         ref: 'v1.5'
         commit: 'sha1-70455df4433fac78f20d5a248f9ebf07ccac11fe'
