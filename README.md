@@ -98,6 +98,24 @@ GET /nais/appsec/repositories
 
 ---
 
+## Not-found responses
+
+Unmatched request paths return HTTP `404` with an `application/problem+json` body explaining that no endpoint matches the path:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Route not found",
+  "status": 404,
+  "detail": "No endpoint matches this request path.",
+  "code": "route_not_found"
+}
+```
+
+When GitHub cannot find a repository or it is not accessible to whodis, `/repository/{repoName}/owners` and `/repository/{repoName}/slackchannels` return HTTP `404` with an empty body instead.
+
+The existing request log records `error.code` as `route_not_found` for unmatched paths or `resource_not_found` for GitHub repository-not-found responses, without a separate handler error log. Other not-found responses, such as a missing NAIS team or Slack channel, retain their existing behavior.
+
 ## Development
 
 **Prerequisites:** Go 1.26+ (or use [mise](https://mise.jdx.dev/) — `mise install` will set up the correct version).

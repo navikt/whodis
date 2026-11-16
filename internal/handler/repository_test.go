@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -67,7 +68,7 @@ func TestHandlePossible404(t *testing.T) {
 				Level:  slog.LevelInfo,
 				Schema: httplog.SchemaOTEL,
 			})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				handlePossible404(tt.err, w)
+				handlePossible404(tt.err, w, r)
 			}))
 			req := httptest.NewRequest(http.MethodGet, "/repository/deleted-repo/owners", nil)
 			w := httptest.NewRecorder()
@@ -86,6 +87,25 @@ func TestHandlePossible404(t *testing.T) {
 			}
 			if tt.wantStatus == http.StatusInternalServerError && !strings.Contains(logs.String(), tt.err.Error()) {
 				t.Errorf("expected unexpected error to be logged: %s", logs.String())
+			}
+			if tt.wantStatus == http.StatusNotFound {
+				if w.Body.Len() != 0 {
+					t.Errorf("expected empty not-found response, got %q", w.Body.String())
+				}
+				if got := w.Header().Get("Content-Type"); got == "application/problem+json" {
+					t.Errorf("unexpected problem details content type on empty response")
+				}
+				var entry struct {
+					Code string `json:"error.code"`
+				}
+				if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+					t.Fatal(err)
+				}
+				if entry.Code != "resource_not_found" {
+					t.Errorf("expected log code resource_not_found, got %q", entry.Code)
+				}
+			} else if strings.Contains(logs.String(), `"error.code"`) {
+				t.Errorf("unexpected not-found classification for server error: %s", logs.String())
 			}
 		})
 	}

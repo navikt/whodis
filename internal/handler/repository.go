@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-chi/httplog/v3"
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/httpsupport"
 	"github.com/navikt/whodis/internal/nais"
@@ -56,7 +57,7 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	defer span.End()
 	owners, err := repo.ownerTeamsForRepo(repoName, ctx)
 	if err != nil {
-		handlePossible404(err, w)
+		handlePossible404(err, w, r)
 		return
 	}
 	if len(owners) != 0 {
@@ -69,7 +70,7 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	slog.Info("no owners found on github, keep looking", slog.Any("owners", owners), slog.Any("repo", repoName))
 	owners, err = repo.allTeamsForRepo(repoName, ctx)
 	if err != nil {
-		handlePossible404(err, w)
+		handlePossible404(err, w, r)
 		return
 	}
 
@@ -78,9 +79,10 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func handlePossible404(err error, w http.ResponseWriter) {
+func handlePossible404(err error, w http.ResponseWriter, r *http.Request) {
 	var httpErr *httpsupport.HttpError
 	if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		httplog.SetAttrs(r.Context(), slog.String("error.code", "resource_not_found"))
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -112,7 +114,7 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	repoName := r.PathValue("repoName")
 	teams, err := repo.GitHubClient.AllTeamsFor(repoName, ctx)
 	if err != nil {
-		handlePossible404(err, w)
+		handlePossible404(err, w, r)
 		return
 	}
 	if len(teams) == 0 {
