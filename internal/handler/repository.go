@@ -25,8 +25,6 @@ type Repository struct {
 	Tracer       trace.Tracer
 }
 
-var notFoundError = &httpsupport.HttpError{Code: 404}
-
 var repoNameRegex = regexp.MustCompile(`^[a-zA-Z0-9æøåÆØÅ\-_]{1,50}$`)
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
@@ -81,12 +79,13 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 }
 
 func handlePossible404(err error, w http.ResponseWriter) {
-	slog.Error("error getting owners for repo", slog.Any("error", err))
-	status := http.StatusInternalServerError
-	if errors.Is(err, notFoundError) {
-		status = http.StatusNotFound
+	var httpErr *httpsupport.HttpError
+	if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
-	w.WriteHeader(status)
+	slog.Error("error getting owners for repo", slog.Any("error", err))
+	w.WriteHeader(http.StatusInternalServerError)
 }
 
 func (repo *Repository) ownerTeamsForRepo(repoName string, ctx context.Context) ([]string, error) {
@@ -113,12 +112,7 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	repoName := r.PathValue("repoName")
 	teams, err := repo.GitHubClient.AllTeamsFor(repoName, ctx)
 	if err != nil {
-		slog.Error("error getting teams for repo", slog.Any("error", err))
-		status := http.StatusInternalServerError
-		if errors.Is(err, notFoundError) {
-			status = http.StatusNotFound
-		}
-		w.WriteHeader(status)
+		handlePossible404(err, w)
 		return
 	}
 	if len(teams) == 0 {
