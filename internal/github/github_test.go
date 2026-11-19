@@ -26,7 +26,7 @@ func TestAbilityToCreateJwtSignedWithSuppliedPEM(t *testing.T) {
 	wd, _ := os.Getwd()
 	path := filepath.Join(wd, "..", "..", "testfiles", "private_key.pem")
 	data, _ := os.ReadFile(path)
-	client := New(string(data), "123", "321", make([]string, 0))
+	client := &Client{pkPEM: string(data), clientId: "123", installId: "321"}
 	token, err := client.createExchangeToken()
 	if err != nil || token == "" {
 		t.Fatalf("Error creating token: %v", err)

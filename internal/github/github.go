@@ -58,8 +58,8 @@ func (c *Client) EmailFor(username string) string {
 	return c.orgUsers[username]
 }
 
-func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, error) {
-	allTeams, err := c.allTeamsForRepo(repoName, ctx)
+func (c *Client) AdminTeamsFor(repository RepositoryID, ctx context.Context) ([]string, error) {
+	allTeams, err := c.allTeamsForRepo(repository, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +67,8 @@ func (c *Client) AdminTeamsFor(repoName string, ctx context.Context) ([]string, 
 	return adminSlugsMinusOrgAdmins, nil
 }
 
-func (c *Client) AllTeamsFor(repoName string, ctx context.Context) ([]string, error) {
-	allTeams, err := c.allTeamsForRepo(repoName, ctx)
+func (c *Client) AllTeamsFor(repository RepositoryID, ctx context.Context) ([]string, error) {
+	allTeams, err := c.allTeamsForRepo(repository, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +76,10 @@ func (c *Client) AllTeamsFor(repoName string, ctx context.Context) ([]string, er
 	return allSlugsMinusOrgAdmins, nil
 }
 
-func (c *Client) allTeamsForRepo(repoName string, ctx context.Context) (teamResponse, error) {
+func (c *Client) allTeamsForRepo(repository RepositoryID, ctx context.Context) (teamResponse, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
-	uri := apiBaseURI + "/repos/navikt/" + repoName + "/teams"
+	uri := apiBaseURI + "/repos/" + repository.String() + "/teams"
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		return nil, err

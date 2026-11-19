@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,9 +14,105 @@ import (
 	"testing"
 
 	"github.com/go-chi/httplog/v3"
+	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/httpsupport"
+	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
+	"go.opentelemetry.io/otel/trace/noop"
 )
+
+type repositoryGitHubStub struct {
+	admins   []string
+	teams    []string
+	err      error
+	requests []string
+	allCalls int
+}
+
+func (c *repositoryGitHubStub) EmailFor(string) string { return "" }
+
+func (c *repositoryGitHubStub) AdminTeamsFor(repository github.RepositoryID, _ context.Context) ([]string, error) {
+	c.requests = append(c.requests, repository.String())
+	return c.admins, c.err
+}
+
+func (c *repositoryGitHubStub) AllTeamsFor(repository github.RepositoryID, _ context.Context) ([]string, error) {
+	c.requests = append(c.requests, repository.String())
+	c.allCalls++
+	return c.teams, c.err
+}
+
+type repositoryNaisStub struct{}
+
+func (repositoryNaisStub) DetailsFor(_ string, _ context.Context) (*nais.TeamDetails, error) {
+	return &nais.TeamDetails{SlackChannel: "#team"}, nil
+}
+
+func TestRepositoryResolution(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		endpoint string
+		admins   []string
+		teams    []string
+		err      error
+		status   int
+		want     []string
+		allCalls int
+	}{
+		{"admin owners", "owners", []string{"admin"}, []string{"reader"}, nil, 200, []string{"admin"}, 0},
+		{"all teams fallback", "owners", nil, []string{"reader"}, nil, 200, []string{"reader"}, 1},
+		{"no owners", "owners", nil, nil, nil, 200, nil, 1},
+		{"Slack channels", "slackchannels", nil, []string{"one", "two"}, nil, 200, []string{"#team"}, 1},
+		{"no Slack channels", "slackchannels", nil, nil, nil, 404, nil, 1},
+		{"owners missing", "owners", nil, nil, &httpsupport.HttpError{Code: 404}, 404, nil, 0},
+		{"Slack repository missing", "slackchannels", nil, nil, &httpsupport.HttpError{Code: 404}, 404, nil, 1},
+	} {
+		for _, owner := range []string{"navikt", "NAVIKT"} {
+			t.Run(tt.name+"/"+owner, func(t *testing.T) {
+				client := &repositoryGitHubStub{admins: tt.admins, teams: tt.teams, err: tt.err}
+				handler := &Repository{
+					GitHubClient: client,
+					NaisClient:   repositoryNaisStub{},
+					Tracer:       noop.NewTracerProvider().Tracer("test"),
+				}
+				request := httptest.NewRequest(http.MethodGet, "/repository/"+owner+"/Some.Repo/"+tt.endpoint, nil)
+				request.SetPathValue("owner", owner)
+				request.SetPathValue("repoName", "Some.Repo")
+				w := httptest.NewRecorder()
+				if tt.endpoint == "owners" {
+					handler.OwnerTeamsForRepo(w, request)
+				} else {
+					handler.SlackChannelsForRepo(w, request)
+				}
+				if w.Code != tt.status {
+					t.Fatalf("expected status %d, got %d: %s", tt.status, w.Code, w.Body.String())
+				}
+				if tt.status == http.StatusOK {
+					var got []string
+					if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+						t.Fatal(err)
+					}
+					if !reflect.DeepEqual(got, tt.want) {
+						t.Errorf("expected %v, got %v", tt.want, got)
+					}
+				} else if w.Body.Len() != 0 {
+					t.Errorf("expected empty not-found response, got %s", w.Body.String())
+				}
+				if len(client.requests) == 0 {
+					t.Fatal("expected a GitHub lookup")
+				}
+				for _, identity := range client.requests {
+					if identity != "navikt/Some.Repo" {
+						t.Errorf("unexpected repository identity %q", identity)
+					}
+				}
+				if client.allCalls != tt.allCalls {
+					t.Errorf("expected %d all-team lookups, got %d", tt.allCalls, client.allCalls)
+				}
+			})
+		}
+	}
+}
 
 func TestHandlePossible404(t *testing.T) {
 	tests := []struct {

@@ -6,12 +6,12 @@ A Go service that resolves ownership for GitHub repositories and NAIS teams at N
 
 No authentication required.
 
-### `GET /repository/{repoName}/owners`
+### `GET /repository/{owner}/{repoName}/owners`
 
 Returns a list of GitHub team slugs that own the repository. Admin teams are checked first; if none are found, all teams with access are returned.
 
 ```
-GET /repository/appsec-guide/owners
+GET /repository/navikt/appsec-guide/owners
 ```
 
 ```json
@@ -23,12 +23,12 @@ GET /repository/appsec-guide/owners
 
 ---
 
-### `GET /repository/{repoName}/slackchannels`
+### `GET /repository/{owner}/{repoName}/slackchannels`
 
 Returns a list of Slack channels associated with teams that have access to the repository.
 
 ```
-GET /repository/appsec-guide/slackchannels
+GET /repository/navikt/appsec-guide/slackchannels
 ```
 
 ```json
@@ -37,6 +37,26 @@ GET /repository/appsec-guide/slackchannels
   "#nais-support"
 ]
 ```
+
+---
+
+### Repository identity and legacy routes
+
+Use the GitHub repository's `full_name` directly in the path, for example `/repository/navikt/whodis/owners`. Only the `navikt` organization is currently supported. Organization names are case-insensitive and normalized to `navikt`; repository name casing is preserved.
+
+Repository names must contain 1 to 100 ASCII letters, digits, dots, underscores or hyphens and cannot be `.` or `..`. Both repository endpoints return HTTP `400` with an `application/problem+json` body for invalid identities or unsupported organizations:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Invalid repository",
+  "status": 400,
+  "detail": "only the navikt organization is supported",
+  "code": "invalid_repository"
+}
+```
+
+The short-name routes `/repository/{repoName}/owners` and `/repository/{repoName}/slackchannels` are deprecated but remain available. They explicitly resolve repositories in `navikt` and use the same validation and resolution as the owner-qualified routes. No removal date has been set.
 
 ---
 
@@ -112,7 +132,7 @@ Unmatched request paths return HTTP `404` with an `application/problem+json` bod
 }
 ```
 
-When GitHub cannot find a repository or it is not accessible to whodis, `/repository/{repoName}/owners` and `/repository/{repoName}/slackchannels` return HTTP `404` with an empty body instead.
+When GitHub cannot find a repository or it is not accessible to whodis, both repository endpoints return HTTP `404` with an empty body instead. This applies to both owner-qualified and legacy routes.
 
 The existing request log records `error.code` as `route_not_found` for unmatched paths or `resource_not_found` for GitHub repository-not-found responses, without a separate handler error log. Other not-found responses, such as a missing NAIS team or Slack channel, retain their existing behavior.
 
