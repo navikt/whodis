@@ -49,7 +49,7 @@ func TestRepositoryRoutesRejectInvalidIdentities(t *testing.T) {
 				if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
 					t.Fatal(err)
 				}
-				if problem.Type != "about:blank" || problem.Title != "Invalid repository" ||
+				if problem.Type != "about:blank" || problem.Title != "Bad Request" ||
 					problem.Status != http.StatusBadRequest || problem.Detail == "" ||
 					problem.Code != "invalid_repository" {
 					t.Errorf("unexpected problem details: %+v", problem)

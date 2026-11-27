@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,9 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-chi/httplog/v3"
 	"github.com/navikt/whodis/internal/github"
-	"github.com/navikt/whodis/internal/httpsupport"
 	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
 	"go.opentelemetry.io/otel/trace"
@@ -42,16 +39,11 @@ func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Reques
 	ghUser := r.PathValue("username")
 	email := repo.GitHubClient.EmailFor(ghUser)
 	if email == "" {
-		w.WriteHeader(http.StatusNotFound)
+		notFound(w, r, "user_not_found", "No NAV email address is known for this GitHub user.")
 		return
 	}
 
-	reply := map[string]string{
-		"email": email,
-	}
-	if err := json.NewEncoder(w).Encode(reply); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	writeJSON(w, r, map[string]string{"email": email})
 }
 
 func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request) {
@@ -60,42 +52,34 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 		invalidRepository(w, r, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 	ctx, span := repo.Tracer.Start(r.Context(), "OwnerTeamsForRepo")
 	defer span.End()
 	owners, err := repo.ownerTeamsForRepo(repository, ctx)
 	if err != nil {
-		handlePossible404(err, w, r)
+		handleRepositoryLookupError(err, w, r)
 		return
 	}
 	if len(owners) != 0 {
-		if err := json.NewEncoder(w).Encode(owners); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
+		writeJSON(w, r, owners)
 		return
 	}
 
 	slog.Info("no owners found on github, keep looking", slog.Any("owners", owners), slog.Any("repo", repository.String()))
 	owners, err = repo.allTeamsForRepo(repository, ctx)
 	if err != nil {
-		handlePossible404(err, w, r)
+		handleRepositoryLookupError(err, w, r)
 		return
 	}
 
-	if err := json.NewEncoder(w).Encode(owners); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	writeJSON(w, r, nonNil(owners))
 }
 
-func handlePossible404(err error, w http.ResponseWriter, r *http.Request) {
-	var httpErr *httpsupport.HttpError
-	if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-		httplog.SetAttrs(r.Context(), slog.String("error.code", "resource_not_found"))
-		w.WriteHeader(http.StatusNotFound)
+func handleRepositoryLookupError(err error, w http.ResponseWriter, r *http.Request) {
+	if isHTTPNotFound(err) {
+		notFound(w, r, "repository_not_found", "The repository does not exist or is not accessible to whodis.")
 		return
 	}
-	slog.Error("error getting owners for repo", slog.Any("error", err))
-	w.WriteHeader(http.StatusInternalServerError)
+	dependencyFailure(w, r, "error looking up repository in GitHub", err)
 }
 
 func (repo *Repository) ownerTeamsForRepo(repository github.RepositoryID, ctx context.Context) ([]string, error) {
@@ -122,30 +106,28 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 		invalidRepository(w, r, err)
 		return
 	}
-	ctx, span := repo.Tracer.Start(r.Context(), "SlcakChannelsForRepo")
+	ctx, span := repo.Tracer.Start(r.Context(), "SlackChannelsForRepo")
 	defer span.End()
 	teams, err := repo.GitHubClient.AllTeamsFor(repository, ctx)
 	if err != nil {
-		handlePossible404(err, w, r)
+		handleRepositoryLookupError(err, w, r)
 		return
 	}
 	if len(teams) == 0 {
 		slog.Info("unable to find team in GitHub", slog.Any("repo", repository.String()))
 	}
-	var channels []string
+	channels := []string{}
 	for _, team := range teams {
 		naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
+		if errors.Is(err, nais.ErrTeamNotFound) {
+			slog.Info("team was not found in nais", slog.Any("team", team))
+			continue
+		}
 		if err != nil {
-			// Dodgy error handling, thanks GraphQL
-			if strings.Contains(err.Error(), "specified team was not found") {
-				slog.Info("team was not found in nais", slog.Any("team", team))
-				continue
-			}
-			slog.Error("error getting channels for repo", slog.Any("error", err))
-			w.WriteHeader(http.StatusInternalServerError)
+			dependencyFailure(w, r, "error getting channels for repo", err)
 			return
 		}
-		if !slices.Contains(channels, naisTeamDetails.SlackChannel) {
+		if naisTeamDetails.SlackChannel != "" && !slices.Contains(channels, naisTeamDetails.SlackChannel) {
 			channels = append(channels, naisTeamDetails.SlackChannel)
 		}
 	}
@@ -154,20 +136,15 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 			slog.Any("repo", repository.String()))
 		channelsFromTeamkatalogen, err := repo.allSlackChannelsForAllRepoAdminPeople(ctx, repository)
 		if err != nil {
-			slog.Error("error getting channels for repo", slog.Any("error", err))
-			w.WriteHeader(http.StatusInternalServerError)
+			dependencyFailure(w, r, "error getting channels for repo", err)
 			return
 		}
 		channels = append(channels, channelsFromTeamkatalogen...)
 	}
 	if len(channels) == 0 {
 		slog.Info("unable to find Slack channel(s)", slog.Any("repo", repository.String()))
-		w.WriteHeader(http.StatusNotFound)
-		return
 	}
-	if err := json.NewEncoder(w).Encode(channels); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-	}
+	writeJSON(w, r, channels)
 }
 
 func (repo *Repository) allSlackChannelsForAllRepoAdminPeople(ctx context.Context, repository github.RepositoryID) ([]string, error) {

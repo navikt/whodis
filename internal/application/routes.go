@@ -57,7 +57,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 		if a.ghClient.SemiStaticDataIsLoaded() {
 			w.WriteHeader(http.StatusOK)
 		} else {
-			w.WriteHeader(http.StatusTeapot)
+			w.WriteHeader(http.StatusServiceUnavailable)
 		}
 	})
 	router.Handle("/metrics", metrics.Handler())
