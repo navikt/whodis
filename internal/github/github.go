@@ -31,19 +31,21 @@ type Client struct {
 	orgUsers                map[string]string
 	orgAdmins               []string
 	teamsToSkip             []string
-	// teamsCache is optional; a nil cache means every lookup goes to GitHub.
-	teamsCache *cache.Cache[teamResponse]
+	// Both caches are optional; a nil cache means every lookup goes to GitHub.
+	teamsCache     *cache.Cache[teamResponse]
+	teamReposCache *cache.Cache[[]string]
 }
 
 func New(appPrivateKeyPem, appClientId, appInstallationId string, teamsToSkip []string) *Client {
 	c := &Client{
-		pkPEM:       appPrivateKeyPem,
-		clientId:    appClientId,
-		installId:   appInstallationId,
-		orgUsers:    make(map[string]string),
-		orgAdmins:   make([]string, 0),
-		teamsToSkip: teamsToSkip,
-		teamsCache:  newRepoTeamsCache(),
+		pkPEM:          appPrivateKeyPem,
+		clientId:       appClientId,
+		installId:      appInstallationId,
+		orgUsers:       make(map[string]string),
+		orgAdmins:      make([]string, 0),
+		teamsToSkip:    teamsToSkip,
+		teamsCache:     newRepoTeamsCache(),
+		teamReposCache: newTeamReposCache(),
 	}
 	go c.syncSemiStaticDataPeriodically()
 	return c
@@ -117,6 +119,15 @@ func (c *Client) fetchTeamsForRepo(repository RepositoryID) (teamResponse, error
 func (c *Client) ReposForTeam(teamSlug string, ctx context.Context) ([]string, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
+	if c.teamReposCache == nil {
+		return c.fetchReposForTeam(teamSlug)
+	}
+	return c.teamReposCache.GetOrLoad(ctx, teamSlug, func(context.Context) ([]string, error) {
+		return c.fetchReposForTeam(teamSlug)
+	})
+}
+
+func (c *Client) fetchReposForTeam(teamSlug string) ([]string, error) {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		return nil, err

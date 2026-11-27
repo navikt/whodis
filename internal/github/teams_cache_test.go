@@ -162,3 +162,62 @@ func TestTeamsToSkipIsAppliedAfterTheCache(t *testing.T) {
 		t.Errorf("cache must hold the unfiltered response, got %v", all)
 	}
 }
+
+func TestReposForTeamIsCachedAndCopySafe(t *testing.T) {
+	requests := stubTeamsEndpoint(t, http.StatusOK, `[{"full_name":"navikt/a"},{"full_name":"navikt/b"}]`)
+	client := &Client{
+		installationToken:       "test-token",
+		installationTokenExpiry: time.Now().Add(time.Hour),
+		teamReposCache:          newTeamReposCache(),
+	}
+
+	first, err := client.ReposForTeam("appsec", context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first[0] = "mutated"
+	second, err := client.ReposForTeam("appsec", context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(second, []string{"navikt/a", "navikt/b"}) {
+		t.Errorf("cached value was corrupted by a caller: %v", second)
+	}
+	if requests.Load() != 1 {
+		t.Errorf("expected 1 upstream request, got %d", requests.Load())
+	}
+}
+
+func TestReposForTeamNegativeResultsAreCachedButFailuresAreNot(t *testing.T) {
+	tests := []struct {
+		name         string
+		status       int
+		body         string
+		wantErr      bool
+		wantRequests int32
+	}{
+		{"team without repositories", http.StatusOK, `[]`, false, 1},
+		{"unknown team", http.StatusNotFound, `{"message":"Not Found"}`, true, 1},
+		{"upstream failure", http.StatusBadGateway, ``, true, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			requests := stubTeamsEndpoint(t, tt.status, tt.body)
+			client := &Client{
+				installationToken:       "test-token",
+				installationTokenExpiry: time.Now().Add(time.Hour),
+				teamReposCache:          newTeamReposCache(),
+			}
+			for range 2 {
+				_, err := client.ReposForTeam("appsec", context.Background())
+				if (err != nil) != tt.wantErr {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			}
+			if requests.Load() != tt.wantRequests {
+				t.Errorf("expected %d upstream requests, got %d", tt.wantRequests, requests.Load())
+			}
+		})
+	}
+}

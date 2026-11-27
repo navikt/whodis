@@ -2,6 +2,7 @@ package nais
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -141,6 +142,74 @@ func TestDetailsForOtherGraphQLErrorsAreNotCached(t *testing.T) {
 		if _, err := api.DetailsFor("appsec", context.Background()); err == nil {
 			t.Fatal("expected an error")
 		}
+	}
+	if requests.Load() != 2 {
+		t.Errorf("expected 2 upstream requests, got %d", requests.Load())
+	}
+}
+
+const (
+	teamRepositoriesResponse = `{"data":{"team":{"slug":"appsec","repositories":{"nodes":[{"name":"navikt/a"},{"name":"navikt/b"}],"pageInfo":{"hasNextPage":false}}}}}`
+	teamWithoutSlugResponse  = `{"data":{"team":{"slug":"","repositories":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}`
+)
+
+func TestRepositoriesForIsCachedAndCopySafe(t *testing.T) {
+	api, requests := cachedApi(t, teamRepositoriesResponse)
+
+	first, err := api.RepositoriesFor("appsec", context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	first[0] = "mutated"
+	second, err := api.RepositoriesFor("appsec", context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(second, []string{"navikt/a", "navikt/b"}) {
+		t.Errorf("cached value was corrupted by a caller: %v", second)
+	}
+	if requests.Load() != 1 {
+		t.Errorf("expected 1 upstream request, got %d", requests.Load())
+	}
+}
+
+func TestRepositoriesForUnknownTeamIsCachedAsErrTeamNotFound(t *testing.T) {
+	api, requests := cachedApi(t, teamNotFoundResponse)
+
+	for range 2 {
+		if _, err := api.RepositoriesFor("ghost", context.Background()); !errors.Is(err, ErrTeamNotFound) {
+			t.Fatalf("expected ErrTeamNotFound, got %v", err)
+		}
+	}
+	if requests.Load() != 1 {
+		t.Errorf("expected the not-found result to be cached, got %d requests", requests.Load())
+	}
+}
+
+func TestRepositoriesForTeamWithoutSlugIsCached(t *testing.T) {
+	api, requests := cachedApi(t, teamWithoutSlugResponse)
+
+	for range 2 {
+		repos, err := api.RepositoriesFor("ghost", context.Background())
+		if err != nil || len(repos) != 0 {
+			t.Fatalf("expected no repositories, got %v, %v", repos, err)
+		}
+	}
+	if requests.Load() != 1 {
+		t.Errorf("expected 1 upstream request, got %d", requests.Load())
+	}
+}
+
+func TestRepositoriesForFailureIsNotCached(t *testing.T) {
+	api, requests := cachedApi(t, accessDeniedGqlBody, teamRepositoriesResponse)
+
+	if _, err := api.RepositoriesFor("appsec", context.Background()); err == nil {
+		t.Fatal("expected the first call to fail")
+	}
+	repos, err := api.RepositoriesFor("appsec", context.Background())
+	if err != nil || len(repos) != 2 {
+		t.Fatalf("expected recovery after a failure, got %v, %v", repos, err)
 	}
 	if requests.Load() != 2 {
 		t.Errorf("expected 2 upstream requests, got %d", requests.Load())

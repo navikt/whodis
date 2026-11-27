@@ -24,6 +24,7 @@ type Api struct {
 	// Both caches are optional; a nil cache means every lookup goes to Nais Console.
 	detailsCache         *cache.Cache[*TeamDetails]
 	repositoryTeamsCache *cache.Cache[[]string]
+	repositoriesCache    *cache.Cache[[]string]
 }
 
 func New(apiKeyLocation string) *Api {
@@ -31,6 +32,7 @@ func New(apiKeyLocation string) *Api {
 		apiKeyLocation:       apiKeyLocation,
 		detailsCache:         newTeamDetailsCache(),
 		repositoryTeamsCache: newRepositoryTeamsCache(),
+		repositoriesCache:    newRepositoriesCache(),
 	}
 }
 
@@ -154,6 +156,15 @@ type repositoryTeamsResponse struct {
 func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
+	if api.repositoriesCache == nil {
+		return api.fetchRepositories(teamSlug)
+	}
+	return api.repositoriesCache.GetOrLoad(ctx, teamSlug, func(context.Context) ([]string, error) {
+		return api.fetchRepositories(teamSlug)
+	})
+}
+
+func (api *Api) fetchRepositories(teamSlug string) ([]string, error) {
 	token, err := api.loadNaisApiToken()
 	if err != nil {
 		return nil, err

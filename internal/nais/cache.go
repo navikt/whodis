@@ -20,6 +20,8 @@ const (
 	repositoryTeamsMaxEntries = 10000
 	// Team details include up to 50 members each, so the bound is tighter to protect memory.
 	teamDetailsMaxEntries = 2000
+	// A team can own hundreds of repositories, so this is bounded like team details.
+	teamRepositoriesMaxEntries = 2000
 
 	teamNotFoundMessage = "specified team was not found"
 )
@@ -52,5 +54,18 @@ func newRepositoryTeamsCache() *cache.Cache[[]string] {
 		MaxEntries:      repositoryTeamsMaxEntries,
 		Clone:           slices.Clone[[]string],
 		IsNegativeValue: func(teams []string) bool { return len(teams) == 0 },
+	})
+}
+
+// newRepositoriesCache holds a team's repository names. Unknown teams and teams without
+// repositories are both negative entries, matching how the handler reports them as 404.
+func newRepositoriesCache() *cache.Cache[[]string] {
+	return cache.New(cache.Options[[]string]{
+		TTL:             cacheTTL,
+		NegativeTTL:     cacheNegativeTTL,
+		MaxEntries:      teamRepositoriesMaxEntries,
+		Clone:           slices.Clone[[]string],
+		IsNegativeError: func(err error) bool { return errors.Is(err, ErrTeamNotFound) },
+		IsNegativeValue: func(repos []string) bool { return len(repos) == 0 },
 	})
 }
