@@ -65,9 +65,10 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 
 func (a *App) loadBusinessRoutes(router chi.Router) {
 	repoHandler := handler.Repository{
-		GitHubClient: a.ghClient,
-		NaisClient:   a.nais,
-		Tracer:       a.tracer,
+		GitHubClient:        a.ghClient,
+		NaisClient:          a.nais,
+		TeamkatalogenClient: a.catalog,
+		Tracer:              a.tracer,
 	}
 	naisApiHandler := handler.NaisApi{
 		NaisClient:   a.nais,
