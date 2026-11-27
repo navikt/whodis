@@ -23,8 +23,10 @@ type Client struct {
 	pkPEM                   string
 	clientId                string
 	installId               string
+	tokenMu                 sync.Mutex
 	installationToken       string
 	installationTokenExpiry time.Time
+	dataMu                  sync.RWMutex
 	orgUsers                map[string]string
 	orgAdmins               []string
 	teamsToSkip             []string
@@ -55,6 +57,8 @@ func (c *Client) Ping() error {
 }
 
 func (c *Client) EmailFor(username string) string {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
 	return c.orgUsers[username]
 }
 
@@ -134,20 +138,21 @@ type NaisDeployment struct {
 }
 
 func (c *Client) SemiStaticDataIsLoaded() bool {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
 	return len(c.orgUsers) > 0 && len(c.orgAdmins) > 0
 }
 
 func (c *Client) syncSemiStaticDataPeriodically() {
-	mutex := sync.Mutex{}
-	c.loadOrgUsers(&mutex)
-	c.loadOrgAdmins(&mutex)
+	c.loadOrgUsers()
+	c.loadOrgAdmins()
 	for range time.Tick(time.Hour * 12) {
-		c.loadOrgUsers(&mutex)
-		c.loadOrgAdmins(&mutex)
+		c.loadOrgUsers()
+		c.loadOrgAdmins()
 	}
 }
 
-func (c *Client) loadOrgUsers(mutex *sync.Mutex) {
+func (c *Client) loadOrgUsers() {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		slog.Error("error loading all users", slog.Any("error", err))
@@ -168,13 +173,13 @@ func (c *Client) loadOrgUsers(mutex *sync.Mutex) {
 		endCursor = page.Data.Organization.SamlIdentityProvider.ExternalIdentities.PageInfo.EndCursor
 	}
 
-	mutex.Lock()
+	c.dataMu.Lock()
 	c.orgUsers = m
-	mutex.Unlock()
-	slog.Info("Loaded users from GitHub", slog.Int("ghUsers", len(c.orgUsers)))
+	c.dataMu.Unlock()
+	slog.Info("Loaded users from GitHub", slog.Int("ghUsers", len(m)))
 }
 
-func (c *Client) loadOrgAdmins(mutex *sync.Mutex) {
+func (c *Client) loadOrgAdmins() {
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
 		slog.Error("Error retrieving auth token", slog.Any("error", err))
@@ -194,10 +199,10 @@ func (c *Client) loadOrgAdmins(mutex *sync.Mutex) {
 	for _, user := range admins {
 		usernames = append(usernames, user.Login)
 	}
-	mutex.Lock()
+	c.dataMu.Lock()
 	c.orgAdmins = usernames
-	mutex.Unlock()
-	slog.Info("Loaded org admins\n", slog.Int("count", len(c.orgAdmins)))
+	c.dataMu.Unlock()
+	slog.Info("Loaded org admins\n", slog.Int("count", len(usernames)))
 }
 
 func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor string) (*samlUsersResponse, error) {
@@ -211,6 +216,9 @@ func (c *Client) queryForUsersPage(authToken string, prPage int, endCursor strin
 }
 
 func (c *Client) retrieveAuthToken() (string, error) {
+	// Held across the refresh so concurrent callers wait for one new token instead of each fetching their own.
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
 	if !c.tokenShouldBeRefreshed(time.Now()) {
 		return c.installationToken, nil
 	}
