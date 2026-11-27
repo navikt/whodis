@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/navikt/whodis/internal/cache"
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/nais"
 	"github.com/navikt/whodis/internal/teamkatalogen"
@@ -60,6 +62,20 @@ func New() (*App, error) {
 	}
 	app.loadRoutes()
 	return app, nil
+}
+
+func (a *App) cacheStats() map[string]cache.Stats {
+	stats := make(map[string]cache.Stats)
+	if a.ghClient != nil {
+		maps.Copy(stats, a.ghClient.CacheStats())
+	}
+	if a.nais != nil {
+		maps.Copy(stats, a.nais.CacheStats())
+	}
+	if a.catalog != nil {
+		maps.Copy(stats, a.catalog.CacheStats())
+	}
+	return stats
 }
 
 func (a *App) Start(ctx context.Context) error {

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
 	"github.com/go-chi/metrics"
+	"github.com/navikt/whodis/internal/cachemetrics"
 	"github.com/navikt/whodis/internal/handler"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -60,7 +61,7 @@ func (a *App) loadNaisRoutes(router chi.Router) {
 			w.WriteHeader(http.StatusTeapot)
 		}
 	})
-	router.Handle("/metrics", metrics.Handler())
+	router.Handle("/metrics", cachemetrics.NewReporter(a.cacheStats).Wrap(metrics.Handler()))
 }
 
 func (a *App) loadBusinessRoutes(router chi.Router) {

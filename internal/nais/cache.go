@@ -69,3 +69,17 @@ func newRepositoriesCache() *cache.Cache[[]string] {
 		IsNegativeValue: func(repos []string) bool { return len(repos) == 0 },
 	})
 }
+
+func (api *Api) CacheStats() map[string]cache.Stats {
+	stats := make(map[string]cache.Stats)
+	if api.detailsCache != nil {
+		stats["nais_team_details"] = api.detailsCache.Stats()
+	}
+	if api.repositoryTeamsCache != nil {
+		stats["nais_repository_teams"] = api.repositoryTeamsCache.Stats()
+	}
+	if api.repositoriesCache != nil {
+		stats["nais_team_repositories"] = api.repositoriesCache.Stats()
+	}
+	return stats
+}

@@ -50,3 +50,14 @@ func isNotFound(err error) bool {
 	var httpErr *httpsupport.HttpError
 	return errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound
 }
+
+func (c *Client) CacheStats() map[string]cache.Stats {
+	stats := make(map[string]cache.Stats)
+	if c.teamsCache != nil {
+		stats["github_repository_teams"] = c.teamsCache.Stats()
+	}
+	if c.teamReposCache != nil {
+		stats["github_team_repositories"] = c.teamReposCache.Stats()
+	}
+	return stats
+}

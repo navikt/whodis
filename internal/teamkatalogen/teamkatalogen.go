@@ -86,3 +86,11 @@ type Team struct {
 func (t Team) IsActive() bool {
 	return t.Status != "INACTIVE"
 }
+
+func (c *Client) CacheStats() map[string]cache.Stats {
+	stats := make(map[string]cache.Stats)
+	if c.detailsCache != nil {
+		stats["teamkatalogen_user_details"] = c.detailsCache.Stats()
+	}
+	return stats
+}
