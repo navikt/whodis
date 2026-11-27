@@ -255,7 +255,7 @@ func (c *Client) retrieveAuthToken() (string, error) {
 	}
 	resp, err := httpsupport.MakePostRequest(apiBaseURI+"/app/installations/"+c.installId+"/access_tokens", exchangeToken, nil)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", errTokenExchange, err)
 	}
 	var tExRes tokenExchangeResult
 	if err := json.Unmarshal(resp, &tExRes); err != nil {

@@ -46,7 +46,14 @@ func newTeamReposCache() *cache.Cache[[]string] {
 	})
 }
 
+// errTokenExchange marks failures of the installation token exchange. They can carry the same HTTP 404
+// as a missing resource, but describe our credentials, so they must never be cached as absence.
+var errTokenExchange = errors.New("installation token exchange failed")
+
 func isNotFound(err error) bool {
+	if errors.Is(err, errTokenExchange) {
+		return false
+	}
 	var httpErr *httpsupport.HttpError
 	return errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound
 }

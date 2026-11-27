@@ -2,6 +2,10 @@ package github
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"io"
 	"net/http"
@@ -219,5 +223,34 @@ func TestReposForTeamNegativeResultsAreCachedButFailuresAreNot(t *testing.T) {
 				t.Errorf("expected %d upstream requests, got %d", tt.wantRequests, requests.Load())
 			}
 		})
+	}
+}
+
+func TestTokenExchangeNotFoundIsNotCachedAsAbsence(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pemKey := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}))
+	requests := stubTeamsEndpoint(t, http.StatusNotFound, `{"message":"Not Found"}`)
+	client := &Client{
+		pkPEM:          pemKey,
+		clientId:       "client-id",
+		installId:      "install-id",
+		teamsCache:     newRepoTeamsCache(),
+		teamReposCache: newTeamReposCache(),
+	}
+	repository := mustRepository(t, "some-repo")
+
+	for range 2 {
+		if _, err := client.AllTeamsFor(repository, context.Background()); !errors.Is(err, errTokenExchange) {
+			t.Fatalf("expected a token exchange error, got %v", err)
+		}
+		if _, err := client.ReposForTeam("some-team", context.Background()); !errors.Is(err, errTokenExchange) {
+			t.Fatalf("expected a token exchange error, got %v", err)
+		}
+	}
+	if requests.Load() != 4 {
+		t.Errorf("token exchange failures must not be cached, expected 4 upstream requests, got %d", requests.Load())
 	}
 }
