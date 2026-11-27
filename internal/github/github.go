@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/navikt/whodis/internal/cache"
 	"github.com/navikt/whodis/internal/httpsupport"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -30,6 +31,8 @@ type Client struct {
 	orgUsers                map[string]string
 	orgAdmins               []string
 	teamsToSkip             []string
+	// teamsCache is optional; a nil cache means every lookup goes to GitHub.
+	teamsCache *cache.Cache[teamResponse]
 }
 
 func New(appPrivateKeyPem, appClientId, appInstallationId string, teamsToSkip []string) *Client {
@@ -40,6 +43,7 @@ func New(appPrivateKeyPem, appClientId, appInstallationId string, teamsToSkip []
 		orgUsers:    make(map[string]string),
 		orgAdmins:   make([]string, 0),
 		teamsToSkip: teamsToSkip,
+		teamsCache:  newRepoTeamsCache(),
 	}
 	go c.syncSemiStaticDataPeriodically()
 	return c
@@ -83,6 +87,17 @@ func (c *Client) AllTeamsFor(repository RepositoryID, ctx context.Context) ([]st
 func (c *Client) allTeamsForRepo(repository RepositoryID, ctx context.Context) (teamResponse, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
+	if c.teamsCache == nil {
+		return c.fetchTeamsForRepo(repository)
+	}
+	// GitHub treats repository names case-insensitively, so one entry serves every spelling.
+	key := strings.ToLower(repository.String())
+	return c.teamsCache.GetOrLoad(ctx, key, func(context.Context) (teamResponse, error) {
+		return c.fetchTeamsForRepo(repository)
+	})
+}
+
+func (c *Client) fetchTeamsForRepo(repository RepositoryID) (teamResponse, error) {
 	uri := apiBaseURI + "/repos/" + repository.String() + "/teams"
 	installationToken, err := c.retrieveAuthToken()
 	if err != nil {
