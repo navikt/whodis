@@ -342,3 +342,101 @@ func TestStalledLoadIsCutOffByLoadTimeoutAndNotCached(t *testing.T) {
 		t.Fatalf("expected a fresh load after the timeout, got %v, %v, %d calls", got, err, calls.Load())
 	}
 }
+
+func TestDistinctKeysNeverExceedMaxConcurrentLoads(t *testing.T) {
+	const limit, keys = 3, 12
+	c := stringsCache(newFakeClock(), func(o *Options[[]string]) {
+		o.MaxConcurrentLoads = limit
+		o.MaxQueuedLoads = keys
+	})
+	var running, peak atomic.Int32
+	load := func(context.Context) ([]string, error) {
+		n := running.Add(1)
+		for p := peak.Load(); n > p && !peak.CompareAndSwap(p, n); p = peak.Load() {
+		}
+		time.Sleep(10 * time.Millisecond)
+		running.Add(-1)
+		return []string{"a"}, nil
+	}
+
+	var wg sync.WaitGroup
+	for i := range keys {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := c.GetOrLoad(context.Background(), string(rune('a'+i)), load); err != nil {
+				t.Errorf("queued load should succeed, got %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if peak.Load() > limit {
+		t.Errorf("expected at most %d concurrent loads, saw %d", limit, peak.Load())
+	}
+}
+
+func TestFullQueueRejectsNewKeysWithoutCachingTheFailure(t *testing.T) {
+	c := stringsCache(newFakeClock(), func(o *Options[[]string]) {
+		o.MaxConcurrentLoads = 1
+		o.MaxQueuedLoads = 1
+	})
+	release := make(chan struct{})
+	started := make(chan struct{}, 2)
+	blocked := func(context.Context) ([]string, error) {
+		started <- struct{}{}
+		<-release
+		return []string{"a"}, nil
+	}
+	go c.GetOrLoad(context.Background(), "running", blocked)
+	<-started
+	go c.GetOrLoad(context.Background(), "queued", blocked)
+	deadline := time.Now().Add(5 * time.Second)
+	for c.queued.Load() < 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("second load never queued")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	var calls atomic.Int32
+	_, err := c.GetOrLoad(context.Background(), "rejected", countingLoader(&calls, []string{"a"}, nil))
+	if !errors.Is(err, ErrOverloaded) || calls.Load() != 0 {
+		t.Fatalf("expected ErrOverloaded without a load, got %v, %d calls", err, calls.Load())
+	}
+	if c.Stats().Rejected != 1 {
+		t.Errorf("expected 1 rejection, got %+v", c.Stats())
+	}
+
+	close(release)
+	deadline = time.Now().Add(5 * time.Second)
+	for c.Stats().Size < 2 {
+		if time.Now().After(deadline) {
+			t.Fatal("running loads did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, err := c.GetOrLoad(context.Background(), "rejected", countingLoader(&calls, []string{"a"}, nil)); err != nil || calls.Load() != 1 {
+		t.Errorf("rejection must not be cached, got %v, %d calls", err, calls.Load())
+	}
+}
+
+func TestQueuedLoadGivesUpAfterLoadTimeout(t *testing.T) {
+	c := stringsCache(newFakeClock(), func(o *Options[[]string]) {
+		o.MaxConcurrentLoads = 1
+		o.LoadTimeout = 20 * time.Millisecond
+	})
+	release := make(chan struct{})
+	started := make(chan struct{})
+	go c.GetOrLoad(context.Background(), "running", func(context.Context) ([]string, error) {
+		close(started)
+		<-release
+		return []string{"a"}, nil
+	})
+	<-started
+	defer close(release)
+
+	_, err := c.GetOrLoad(context.Background(), "waiting", countingLoader(new(atomic.Int32), []string{"a"}, nil))
+	if !errors.Is(err, ErrOverloaded) {
+		t.Fatalf("expected ErrOverloaded after queue timeout, got %v", err)
+	}
+}

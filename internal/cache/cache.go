@@ -3,6 +3,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,17 @@ import (
 // DefaultLoadTimeout bounds a load when Options.LoadTimeout is not set.
 const DefaultLoadTimeout = time.Minute
 
+const (
+	// DefaultMaxConcurrentLoads bounds simultaneous loads when Options.MaxConcurrentLoads is not set.
+	DefaultMaxConcurrentLoads = 16
+	// DefaultMaxQueuedLoads bounds loads waiting for a slot when Options.MaxQueuedLoads is not set.
+	DefaultMaxQueuedLoads = 64
+)
+
+// ErrOverloaded is returned when too many distinct keys are loading and the wait queue is full,
+// or a load waited LoadTimeout for a slot. It is never cached.
+var ErrOverloaded = errors.New("cache: too many concurrent loads")
+
 type Options[V any] struct {
 	// TTL is how long a successfully loaded value is served. Must be positive.
 	TTL time.Duration
@@ -24,6 +36,13 @@ type Options[V any] struct {
 	// LoadTimeout is the deadline of a single load, which runs detached from its callers. Defaults to
 	// DefaultLoadTimeout. It must cover every upstream request a loader makes, such as pagination.
 	LoadTimeout time.Duration
+	// MaxConcurrentLoads bounds loads running at once across distinct keys, since they keep running
+	// after their callers disconnect. Coalesced callers of one key share a slot. Defaults to
+	// DefaultMaxConcurrentLoads.
+	MaxConcurrentLoads int
+	// MaxQueuedLoads bounds loads waiting for a slot. Beyond it, new keys fail fast with
+	// ErrOverloaded. A queued load also gives up after LoadTimeout. Defaults to DefaultMaxQueuedLoads.
+	MaxQueuedLoads int
 	// Clone is applied to every value handed out, so callers can mutate results without
 	// corrupting the cache. Required when V is a slice, map or pointer.
 	Clone func(V) V
@@ -44,7 +63,9 @@ type Stats struct {
 	// Loads counts loader invocations. Misses minus Loads is the number of coalesced or late-served callers.
 	Loads     int64
 	Evictions int64
-	Size      int
+	// Rejected counts loads refused with ErrOverloaded.
+	Rejected int64
+	Size     int
 }
 
 type entry[V any] struct {
@@ -59,8 +80,10 @@ type Cache[V any] struct {
 	mu      sync.Mutex
 	entries map[string]entry[V]
 	group   singleflight.Group
+	slots   chan struct{}
+	queued  atomic.Int64
 
-	hits, negativeHits, misses, loads, evictions atomic.Int64
+	hits, negativeHits, misses, loads, evictions, rejected atomic.Int64
 }
 
 func New[V any](opts Options[V]) *Cache[V] {
@@ -73,17 +96,27 @@ func New[V any](opts Options[V]) *Cache[V] {
 	if opts.LoadTimeout <= 0 {
 		opts.LoadTimeout = DefaultLoadTimeout
 	}
+	if opts.MaxConcurrentLoads <= 0 {
+		opts.MaxConcurrentLoads = DefaultMaxConcurrentLoads
+	}
+	if opts.MaxQueuedLoads <= 0 {
+		opts.MaxQueuedLoads = DefaultMaxQueuedLoads
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	return &Cache[V]{opts: opts, entries: make(map[string]entry[V])}
+	return &Cache[V]{
+		opts:    opts,
+		entries: make(map[string]entry[V]),
+		slots:   make(chan struct{}, opts.MaxConcurrentLoads),
+	}
 }
 
 // GetOrLoad returns the cached value for key, or runs load once for all concurrent callers of the same key.
 //
 // The loader runs detached from the cancellation of the calling context (values such as trace
 // spans are kept), so one caller giving up does not fail the others. Each caller still stops
-// waiting when its own context is done. The detached load gets its own LoadTimeout, so an
+// waiting when its own context is done. Distinct keys load concurrently up to MaxConcurrentLoads. The detached load gets its own LoadTimeout, so an
 // unresponsive upstream cannot hold a key's flight open indefinitely.
 func (c *Cache[V]) GetOrLoad(ctx context.Context, key string, load func(context.Context) (V, error)) (V, error) {
 	if e, ok := c.lookup(key); ok {
@@ -118,6 +151,7 @@ func (c *Cache[V]) Stats() Stats {
 		Misses:       c.misses.Load(),
 		Loads:        c.loads.Load(),
 		Evictions:    c.evictions.Load(),
+		Rejected:     c.rejected.Load(),
 		Size:         size,
 	}
 }
@@ -127,6 +161,11 @@ func (c *Cache[V]) fill(ctx context.Context, key string, load func(context.Conte
 	if e, ok := c.lookup(key); ok {
 		return e
 	}
+	if !c.acquire() {
+		c.rejected.Add(1)
+		return entry[V]{err: ErrOverloaded}
+	}
+	defer func() { <-c.slots }()
 	c.loads.Add(1)
 	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.opts.LoadTimeout)
 	defer cancel()
@@ -153,6 +192,28 @@ func (c *Cache[V]) fill(ctx context.Context, key string, load func(context.Conte
 	e.expires = c.opts.Now().Add(ttl)
 	c.store(key, e)
 	return e
+}
+
+// acquire takes a load slot, queueing behind running loads. The queue is bounded in both size and time.
+func (c *Cache[V]) acquire() bool {
+	select {
+	case c.slots <- struct{}{}:
+		return true
+	default:
+	}
+	if c.queued.Add(1) > int64(c.opts.MaxQueuedLoads) {
+		c.queued.Add(-1)
+		return false
+	}
+	defer c.queued.Add(-1)
+	timer := time.NewTimer(c.opts.LoadTimeout)
+	defer timer.Stop()
+	select {
+	case c.slots <- struct{}{}:
+		return true
+	case <-timer.C:
+		return false
+	}
 }
 
 func (c *Cache[V]) result(e entry[V]) (V, error) {
