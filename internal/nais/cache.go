@@ -1,0 +1,56 @@
+package nais
+
+import (
+	"errors"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/navikt/whodis/internal/cache"
+	"github.com/navikt/whodis/internal/httpsupport"
+)
+
+const (
+	cacheTTL         = 15 * time.Minute
+	cacheNegativeTTL = 2 * time.Minute
+
+	// TeamsForRepository pages through every Nais team, so its results are worth keeping longer.
+	repositoryTeamsTTL = 30 * time.Minute
+	// Entries are small slug lists, so the bound can be generous.
+	repositoryTeamsMaxEntries = 10000
+	// Team details include up to 50 members each, so the bound is tighter to protect memory.
+	teamDetailsMaxEntries = 2000
+
+	teamNotFoundMessage = "specified team was not found"
+)
+
+func newTeamDetailsCache() *cache.Cache[*TeamDetails] {
+	return cache.New(cache.Options[*TeamDetails]{
+		TTL:         cacheTTL,
+		NegativeTTL: cacheNegativeTTL,
+		MaxEntries:  teamDetailsMaxEntries,
+		Clone: func(d *TeamDetails) *TeamDetails {
+			if d == nil {
+				return nil
+			}
+			clone := *d
+			clone.Members = slices.Clone(d.Members)
+			return &clone
+		},
+		IsNegativeError: func(err error) bool {
+			var gqlErr *httpsupport.GqlError
+			return errors.As(err, &gqlErr) && strings.Contains(gqlErr.Message, teamNotFoundMessage)
+		},
+		IsNegativeValue: func(d *TeamDetails) bool { return d == nil || d.Slug == "" },
+	})
+}
+
+func newRepositoryTeamsCache() *cache.Cache[[]string] {
+	return cache.New(cache.Options[[]string]{
+		TTL:             repositoryTeamsTTL,
+		NegativeTTL:     cacheNegativeTTL,
+		MaxEntries:      repositoryTeamsMaxEntries,
+		Clone:           slices.Clone[[]string],
+		IsNegativeValue: func(teams []string) bool { return len(teams) == 0 },
+	})
+}

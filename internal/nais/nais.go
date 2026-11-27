@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/navikt/whodis/internal/cache"
 	"github.com/navikt/whodis/internal/httpsupport"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -20,15 +21,31 @@ var naisApiBaseUrl = "https://console.nav.cloud.nais.io/graphql"
 
 type Api struct {
 	apiKeyLocation string
+	// Both caches are optional; a nil cache means every lookup goes to Nais Console.
+	detailsCache         *cache.Cache[*TeamDetails]
+	repositoryTeamsCache *cache.Cache[[]string]
 }
 
 func New(apiKeyLocation string) *Api {
-	return &Api{apiKeyLocation}
+	return &Api{
+		apiKeyLocation:       apiKeyLocation,
+		detailsCache:         newTeamDetailsCache(),
+		repositoryTeamsCache: newRepositoryTeamsCache(),
+	}
 }
 
 func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, error) {
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
+	if api.detailsCache == nil {
+		return api.fetchDetails(teamSlug)
+	}
+	return api.detailsCache.GetOrLoad(ctx, teamSlug, func(context.Context) (*TeamDetails, error) {
+		return api.fetchDetails(teamSlug)
+	})
+}
+
+func (api *Api) fetchDetails(teamSlug string) (*TeamDetails, error) {
 	query := strings.Replace(teamQuery, "$slug", teamSlug, 1)
 	token, err := api.loadNaisApiToken()
 	if err != nil {
@@ -43,6 +60,16 @@ func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, 
 
 // TeamsForRepository reverses the team repository connection exposed by Nais.
 func (api *Api) TeamsForRepository(repository string, ctx context.Context) ([]string, error) {
+	if api.repositoryTeamsCache == nil {
+		return api.fetchTeamsForRepository(repository, ctx)
+	}
+	// Keyed on the exact spelling: the server-side filter may be case-sensitive, so spellings can differ in result.
+	return api.repositoryTeamsCache.GetOrLoad(ctx, repository, func(loadCtx context.Context) ([]string, error) {
+		return api.fetchTeamsForRepository(repository, loadCtx)
+	})
+}
+
+func (api *Api) fetchTeamsForRepository(repository string, ctx context.Context) ([]string, error) {
 	token, err := api.loadNaisApiToken()
 	if err != nil {
 		return nil, err
