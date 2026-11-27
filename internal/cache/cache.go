@@ -11,6 +11,9 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// DefaultLoadTimeout bounds a load when Options.LoadTimeout is not set.
+const DefaultLoadTimeout = time.Minute
+
 type Options[V any] struct {
 	// TTL is how long a successfully loaded value is served. Must be positive.
 	TTL time.Duration
@@ -18,6 +21,9 @@ type Options[V any] struct {
 	NegativeTTL time.Duration
 	// MaxEntries bounds memory use. Must be positive.
 	MaxEntries int
+	// LoadTimeout is the deadline of a single load, which runs detached from its callers. Defaults to
+	// DefaultLoadTimeout. It must cover every upstream request a loader makes, such as pagination.
+	LoadTimeout time.Duration
 	// Clone is applied to every value handed out, so callers can mutate results without
 	// corrupting the cache. Required when V is a slice, map or pointer.
 	Clone func(V) V
@@ -64,6 +70,9 @@ func New[V any](opts Options[V]) *Cache[V] {
 	if opts.MaxEntries <= 0 {
 		panic("cache: MaxEntries must be positive")
 	}
+	if opts.LoadTimeout <= 0 {
+		opts.LoadTimeout = DefaultLoadTimeout
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -74,7 +83,8 @@ func New[V any](opts Options[V]) *Cache[V] {
 //
 // The loader runs detached from the cancellation of the calling context (values such as trace
 // spans are kept), so one caller giving up does not fail the others. Each caller still stops
-// waiting when its own context is done.
+// waiting when its own context is done. The detached load gets its own LoadTimeout, so an
+// unresponsive upstream cannot hold a key's flight open indefinitely.
 func (c *Cache[V]) GetOrLoad(ctx context.Context, key string, load func(context.Context) (V, error)) (V, error) {
 	if e, ok := c.lookup(key); ok {
 		if e.negative {
@@ -118,7 +128,9 @@ func (c *Cache[V]) fill(ctx context.Context, key string, load func(context.Conte
 		return e
 	}
 	c.loads.Add(1)
-	v, err := safeLoad(context.WithoutCancel(ctx), load)
+	loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.opts.LoadTimeout)
+	defer cancel()
+	v, err := safeLoad(loadCtx, load)
 	if err == nil && c.opts.Clone != nil {
 		// The cache must not share memory with whatever the loader still holds.
 		v = c.opts.Clone(v)

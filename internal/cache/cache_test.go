@@ -323,3 +323,22 @@ func TestLoaderPanicBecomesError(t *testing.T) {
 		t.Error("panic result must not be stored")
 	}
 }
+
+func TestStalledLoadIsCutOffByLoadTimeoutAndNotCached(t *testing.T) {
+	c := stringsCache(newFakeClock(), func(o *Options[[]string]) { o.LoadTimeout = 20 * time.Millisecond })
+	stalled := func(ctx context.Context) ([]string, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
+	_, err := c.GetOrLoad(context.Background(), "k", stalled)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+
+	var calls atomic.Int32
+	got, err := c.GetOrLoad(context.Background(), "k", countingLoader(&calls, []string{"a"}, nil))
+	if err != nil || !reflect.DeepEqual(got, []string{"a"}) || calls.Load() != 1 {
+		t.Fatalf("expected a fresh load after the timeout, got %v, %v, %d calls", got, err, calls.Load())
+	}
+}

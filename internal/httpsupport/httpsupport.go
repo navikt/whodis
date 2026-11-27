@@ -2,14 +2,19 @@ package httpsupport
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
-var client = http.Client{}
+// The timeout is a backstop for callers whose context has no deadline. It covers connecting, redirects and reading the body.
+var client = http.Client{Timeout: requestTimeout}
+
+const requestTimeout = 30 * time.Second
 
 type HttpError struct {
 	Code int
@@ -19,8 +24,12 @@ func (e *HttpError) Error() string {
 	return fmt.Sprintf("HTTP request failed: %d", e.Code)
 }
 
-func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
-	resp, err := http.Get(uri)
+func MakeUnauthenticatedGetRequest(ctx context.Context, uri string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +40,8 @@ func MakeUnauthenticatedGetRequest(uri string) ([]byte, error) {
 	return readResponse(resp)
 }
 
-func MakeAuthenticatedGetRequest(uri, authToken string) ([]byte, error) {
-	req, err := http.NewRequest("GET", uri, nil)
+func MakeAuthenticatedGetRequest(ctx context.Context, uri, authToken string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -51,8 +60,8 @@ func MakeAuthenticatedGetRequest(uri, authToken string) ([]byte, error) {
 	return readResponse(resp)
 }
 
-func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, error) {
-	req, err := http.NewRequest("POST", uri, bytes.NewBuffer(reqBody))
+func MakePostRequest(ctx context.Context, uri string, authToken string, reqBody []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, err
 	}
@@ -76,10 +85,10 @@ func MakePostRequest(uri string, authToken string, reqBody []byte) ([]byte, erro
 	return resBody, nil
 }
 
-func MakeGqlQuery[T any](uri string, authToken string, query string) (*T, error) {
+func MakeGqlQuery[T any](ctx context.Context, uri string, authToken string, query string) (*T, error) {
 	queryAsSingleLine := strings.Replace(query, "\n", " ", -1)
 	reqBody := `{ "query": " ` + queryAsSingleLine + ` " }`
-	resBody, err := MakePostRequest(uri, authToken, []byte(reqBody))
+	resBody, err := MakePostRequest(ctx, uri, authToken, []byte(reqBody))
 	if err != nil {
 		return new(T), err
 	}

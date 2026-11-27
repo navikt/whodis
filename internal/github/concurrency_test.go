@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -38,7 +39,7 @@ func TestConcurrentTokenRefreshFetchesOneToken(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			token, err := client.retrieveAuthToken()
+			token, err := client.retrieveAuthToken(context.Background())
 			if err != nil || token != "fresh-token" {
 				t.Errorf("unexpected token %q, err %v", token, err)
 			}

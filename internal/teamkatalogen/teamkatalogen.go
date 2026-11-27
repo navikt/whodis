@@ -51,16 +51,16 @@ func (c *Client) DetailsForUser(email string, ctx context.Context) (*UserDetails
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
 	if c.detailsCache == nil {
-		return fetchDetailsForUser(email)
+		return fetchDetailsForUser(ctx, email)
 	}
-	return c.detailsCache.GetOrLoad(ctx, email, func(context.Context) (*UserDetails, error) {
-		return fetchDetailsForUser(email)
+	return c.detailsCache.GetOrLoad(ctx, email, func(loadCtx context.Context) (*UserDetails, error) {
+		return fetchDetailsForUser(loadCtx, email)
 	})
 }
 
-func fetchDetailsForUser(email string) (*UserDetails, error) {
-	resp, err := httpsupport.MakeUnauthenticatedGetRequest(apiBaseURI +
-		"/member/membership/byUserEmail?email=" + url.QueryEscape(email))
+func fetchDetailsForUser(ctx context.Context, email string) (*UserDetails, error) {
+	resp, err := httpsupport.MakeUnauthenticatedGetRequest(ctx, apiBaseURI+
+		"/member/membership/byUserEmail?email="+url.QueryEscape(email))
 	if err != nil {
 		return nil, err
 	}

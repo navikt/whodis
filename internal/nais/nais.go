@@ -40,20 +40,20 @@ func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, 
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
 	if api.detailsCache == nil {
-		return api.fetchDetails(teamSlug)
+		return api.fetchDetails(ctx, teamSlug)
 	}
-	return api.detailsCache.GetOrLoad(ctx, teamSlug, func(context.Context) (*TeamDetails, error) {
-		return api.fetchDetails(teamSlug)
+	return api.detailsCache.GetOrLoad(ctx, teamSlug, func(loadCtx context.Context) (*TeamDetails, error) {
+		return api.fetchDetails(loadCtx, teamSlug)
 	})
 }
 
-func (api *Api) fetchDetails(teamSlug string) (*TeamDetails, error) {
+func (api *Api) fetchDetails(ctx context.Context, teamSlug string) (*TeamDetails, error) {
 	query := strings.Replace(teamQuery, "$slug", teamSlug, 1)
 	token, err := api.loadNaisApiToken()
 	if err != nil {
 		return nil, err
 	}
-	resp, err := httpsupport.MakeGqlQuery[teamQueryResponse](naisApiBaseUrl, token, query)
+	resp, err := httpsupport.MakeGqlQuery[teamQueryResponse](ctx, naisApiBaseUrl, token, query)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (api *Api) fetchTeamsForRepository(repository string, ctx context.Context) 
 		// MakeGqlQuery expects quotes escaped for its JSON request body.
 		query = strconv.Quote(query)
 		query = query[1 : len(query)-1]
-		resp, err := httpsupport.MakeGqlQuery[repositoryTeamsResponse](naisApiBaseUrl, token, query)
+		resp, err := httpsupport.MakeGqlQuery[repositoryTeamsResponse](ctx, naisApiBaseUrl, token, query)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +109,7 @@ func (api *Api) fetchTeamsForRepository(repository string, ctx context.Context) 
 			}
 			if team.Repositories.PageInfo.HasNextPage {
 				// Bypass the repositories cache: this result is cached on its own and must not inherit stale data.
-				names, err = api.fetchRepositories(team.Slug)
+				names, err = api.fetchRepositories(ctx, team.Slug)
 				if err != nil {
 					return nil, err
 				}
@@ -158,14 +158,14 @@ func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string,
 	span := trace.SpanFromContext(ctx)
 	defer span.End()
 	if api.repositoriesCache == nil {
-		return api.fetchRepositories(teamSlug)
+		return api.fetchRepositories(ctx, teamSlug)
 	}
-	return api.repositoriesCache.GetOrLoad(ctx, teamSlug, func(context.Context) ([]string, error) {
-		return api.fetchRepositories(teamSlug)
+	return api.repositoriesCache.GetOrLoad(ctx, teamSlug, func(loadCtx context.Context) ([]string, error) {
+		return api.fetchRepositories(loadCtx, teamSlug)
 	})
 }
 
-func (api *Api) fetchRepositories(teamSlug string) ([]string, error) {
+func (api *Api) fetchRepositories(ctx context.Context, teamSlug string) ([]string, error) {
 	token, err := api.loadNaisApiToken()
 	if err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func (api *Api) fetchRepositories(teamSlug string) ([]string, error) {
 	var cursor string
 	for {
 		query := buildRepoQuery(teamSlug, cursor)
-		resp, err := httpsupport.MakeGqlQuery[repoQueryResponse](naisApiBaseUrl, token, query)
+		resp, err := httpsupport.MakeGqlQuery[repoQueryResponse](ctx, naisApiBaseUrl, token, query)
 		if err != nil {
 			var gqlErr *httpsupport.GqlError
 			if errors.As(err, &gqlErr) && strings.Contains(strings.ToLower(gqlErr.Message), "not found") {
