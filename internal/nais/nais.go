@@ -108,7 +108,8 @@ func (api *Api) fetchTeamsForRepository(repository string, ctx context.Context) 
 				names = append(names, node.Name)
 			}
 			if team.Repositories.PageInfo.HasNextPage {
-				names, err = api.RepositoriesFor(team.Slug, ctx)
+				// Bypass the repositories cache: this result is cached on its own and must not inherit stale data.
+				names, err = api.fetchRepositories(team.Slug)
 				if err != nil {
 					return nil, err
 				}

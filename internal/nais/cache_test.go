@@ -215,3 +215,23 @@ func TestRepositoriesForFailureIsNotCached(t *testing.T) {
 		t.Errorf("expected 2 upstream requests, got %d", requests.Load())
 	}
 }
+
+func TestTeamsForRepositoryReadsFreshRepositoriesWhenPaginated(t *testing.T) {
+	const (
+		staleRepositories = `{"data":{"team":{"slug":"late","repositories":{"nodes":[{"name":"navikt/old"}],"pageInfo":{"hasNextPage":false}}}}}`
+		paginatedTeams    = `{"data":{"teams":{"nodes":[{"slug":"late","repositories":{"nodes":[{"name":"navikt/old"}],"pageInfo":{"hasNextPage":true}}}],"pageInfo":{"hasNextPage":false}}}}`
+		freshRepositories = `{"data":{"team":{"slug":"late","repositories":{"nodes":[{"name":"navikt/old"},{"name":"navikt/dp-meldekort"}],"pageInfo":{"hasNextPage":false}}}}}`
+	)
+	api, _ := cachedApi(t, staleRepositories, paginatedTeams, freshRepositories)
+
+	if _, err := api.RepositoriesFor("late", context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	teams, err := api.TeamsForRepository("navikt/dp-meldekort", context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(teams, []string{"late"}) {
+		t.Errorf("expected the reverse lookup to use fresh repositories, got %v", teams)
+	}
+}
