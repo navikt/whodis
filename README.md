@@ -8,7 +8,7 @@ No authentication required.
 
 ### `GET /repository/{owner}/{repoName}/owners`
 
-Returns a list of GitHub team slugs that own the repository. Admin teams are checked first; if none are found, all teams with access are returned.
+Returns a list of team slugs that own the repository. GitHub admin teams are checked first; if none are found, all GitHub teams with access are returned. If GitHub returns no eligible teams, Nais Console is checked for teams connected to the repository.
 
 ```
 GET /repository/navikt/appsec-guide/owners
@@ -25,7 +25,7 @@ GET /repository/navikt/appsec-guide/owners
 
 ### `GET /repository/{owner}/{repoName}/slackchannels`
 
-Returns a list of Slack channels associated with teams that have access to the repository.
+Returns a list of Slack channels associated with teams that have access to the repository. GitHub teams are resolved through Nais Console first. If no channels are found, teams connected to the repository in Nais Console are checked before the existing Teamkatalogen fallback. Empty channels are ignored and duplicate channels are removed. Returns `404` if no channel is found; upstream lookup failures return `500` rather than being treated as no matches.
 
 ```
 GET /repository/navikt/appsec-guide/slackchannels

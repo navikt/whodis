@@ -42,10 +42,177 @@ func (c *repositoryGitHubStub) AllTeamsFor(repository github.RepositoryID, _ con
 	return c.teams, c.err
 }
 
-type repositoryNaisStub struct{}
+type repositoryNaisStub struct {
+	teams        []string
+	err          error
+	repositories *[]string
+	details      map[string]*nais.TeamDetails
+	detailErrors map[string]error
+}
 
-func (repositoryNaisStub) DetailsFor(_ string, _ context.Context) (*nais.TeamDetails, error) {
+func (c repositoryNaisStub) TeamsForRepository(repository string, _ context.Context) ([]string, error) {
+	if c.repositories != nil {
+		*c.repositories = append(*c.repositories, repository)
+	}
+	return c.teams, c.err
+}
+
+func (c repositoryNaisStub) DetailsFor(team string, _ context.Context) (*nais.TeamDetails, error) {
+	if err := c.detailErrors[team]; err != nil {
+		return nil, err
+	}
+	if details, ok := c.details[team]; ok {
+		return details, nil
+	}
 	return &nais.TeamDetails{SlackChannel: "#team"}, nil
+}
+
+func TestSlackNaisFallbackAfterUnresolvedGitHubTeams(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		details     map[string]*nais.TeamDetails
+		errors      map[string]error
+		status      int
+		want        []string
+		wantLookups int
+	}{
+		{
+			name: "empty GitHub team channel",
+			details: map[string]*nais.TeamDetails{
+				"github-team": {SlackChannel: " "},
+			},
+			status: 200, want: []string{"#team"}, wantLookups: 1,
+		},
+		{
+			name: "GitHub team missing in Nais",
+			errors: map[string]error{
+				"github-team": errors.New("specified team was not found"),
+			},
+			status: 200, want: []string{"#team"}, wantLookups: 1,
+		},
+		{
+			name: "Nais team has no channel",
+			details: map[string]*nais.TeamDetails{
+				"github-team": {SlackChannel: ""},
+				"nais-team":   {SlackChannel: ""},
+			},
+			status: 404, wantLookups: 1,
+		},
+		{
+			name: "GitHub team details failure",
+			errors: map[string]error{
+				"github-team": errors.New("Nais unavailable"),
+			},
+			status: 500,
+		},
+		{
+			name: "fallback team details failure",
+			details: map[string]*nais.TeamDetails{
+				"github-team": {SlackChannel: ""},
+			},
+			errors: map[string]error{
+				"nais-team": errors.New("Nais unavailable"),
+			},
+			status: 500, wantLookups: 1,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var lookups []string
+			handler := &Repository{
+				GitHubClient: &repositoryGitHubStub{teams: []string{"github-team"}},
+				NaisClient: repositoryNaisStub{
+					teams: []string{"nais-team"}, repositories: &lookups,
+					details: tt.details, detailErrors: tt.errors,
+				},
+				Tracer: noop.NewTracerProvider().Tracer("test"),
+			}
+			request := httptest.NewRequest(http.MethodGet, "/repository/navikt/dp-meldekort/slackchannels", nil)
+			request.SetPathValue("owner", "navikt")
+			request.SetPathValue("repoName", "dp-meldekort")
+			w := httptest.NewRecorder()
+			handler.SlackChannelsForRepo(w, request)
+			if w.Code != tt.status {
+				t.Fatalf("expected status %d, got %d: %s", tt.status, w.Code, w.Body.String())
+			}
+			if len(lookups) != tt.wantLookups {
+				t.Errorf("expected %d Nais ownership lookups, got %d", tt.wantLookups, len(lookups))
+			}
+			if tt.status == http.StatusOK {
+				var got []string
+				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("expected %v, got %v", tt.want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestRepositoryNaisFallback(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		endpoint    string
+		admins      []string
+		githubTeams []string
+		naisTeams   []string
+		naisErr     error
+		status      int
+		want        []string
+		naisCalls   int
+	}{
+		{"Nais owners", "owners", nil, nil, []string{"team-one", "team-two"}, nil, 200, []string{"team-one", "team-two"}, 1},
+		{"Nais Slack channels", "slackchannels", nil, nil, []string{"team-one", "team-two"}, nil, 200, []string{"#team"}, 1},
+		{"GitHub admins take precedence", "owners", []string{"admin"}, nil, nil, errors.New("must not call Nais"), 200, []string{"admin"}, 0},
+		{"GitHub teams take precedence", "owners", nil, []string{"reader"}, nil, errors.New("must not call Nais"), 200, []string{"reader"}, 0},
+		{"GitHub channels take precedence", "slackchannels", nil, []string{"reader"}, nil, errors.New("must not call Nais"), 200, []string{"#team"}, 0},
+		{"no Nais owners", "owners", nil, nil, nil, nil, 200, nil, 1},
+		{"no Nais channels", "slackchannels", nil, nil, nil, nil, 404, nil, 1},
+		{"Nais owner failure", "owners", nil, nil, nil, errors.New("Nais unavailable"), 500, nil, 1},
+		{"Nais Slack failure", "slackchannels", nil, nil, nil, errors.New("Nais unavailable"), 500, nil, 1},
+		{"Nais upstream 404 is not a missing repository", "owners", nil, nil, nil, &httpsupport.HttpError{Code: 404}, 500, nil, 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var lookups []string
+			handler := &Repository{
+				GitHubClient: &repositoryGitHubStub{admins: tt.admins, teams: tt.githubTeams},
+				NaisClient: repositoryNaisStub{
+					teams: tt.naisTeams, err: tt.naisErr, repositories: &lookups,
+				},
+				Tracer: noop.NewTracerProvider().Tracer("test"),
+			}
+			request := httptest.NewRequest(http.MethodGet, "/repository/navikt/dp-meldekort/"+tt.endpoint, nil)
+			request.SetPathValue("owner", "navikt")
+			request.SetPathValue("repoName", "dp-meldekort")
+			w := httptest.NewRecorder()
+			if tt.endpoint == "owners" {
+				handler.OwnerTeamsForRepo(w, request)
+			} else {
+				handler.SlackChannelsForRepo(w, request)
+			}
+			if w.Code != tt.status {
+				t.Fatalf("expected status %d, got %d: %s", tt.status, w.Code, w.Body.String())
+			}
+			if tt.status == http.StatusOK {
+				var got []string
+				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("expected %v, got %v", tt.want, got)
+				}
+			}
+			if len(lookups) != tt.naisCalls {
+				t.Fatalf("expected %d Nais lookups, got %v", tt.naisCalls, lookups)
+			}
+			for _, repository := range lookups {
+				if repository != "navikt/dp-meldekort" {
+					t.Errorf("unexpected repository %q", repository)
+				}
+			}
+		})
+	}
 }
 
 func TestRepositoryResolution(t *testing.T) {

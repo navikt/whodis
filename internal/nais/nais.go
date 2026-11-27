@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/navikt/whodis/internal/httpsupport"
@@ -37,6 +39,89 @@ func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, 
 		return nil, err
 	}
 	return resp.asTeam(), nil
+}
+
+// TeamsForRepository reverses the team repository connection exposed by Nais.
+func (api *Api) TeamsForRepository(repository string, ctx context.Context) ([]string, error) {
+	token, err := api.loadNaisApiToken()
+	if err != nil {
+		return nil, err
+	}
+	var teams []string
+	var cursor string
+	for {
+		afterArg := ""
+		if cursor != "" {
+			afterArg = fmt.Sprintf(", after: %q", cursor)
+		}
+		query := fmt.Sprintf(`query {
+				teams(first: 100%s) {
+					nodes {
+						slug
+						repositories(first: 100, filter: {name: %q}) {
+							nodes { name }
+							pageInfo { hasNextPage endCursor }
+						}
+					}
+					pageInfo { hasNextPage endCursor }
+				}
+			}`, afterArg, repository)
+		// MakeGqlQuery expects quotes escaped for its JSON request body.
+		query = strconv.Quote(query)
+		query = query[1 : len(query)-1]
+		resp, err := httpsupport.MakeGqlQuery[repositoryTeamsResponse](naisApiBaseUrl, token, query)
+		if err != nil {
+			return nil, err
+		}
+		for _, team := range resp.Data.Teams.Nodes {
+			var names []string
+			for _, node := range team.Repositories.Nodes {
+				names = append(names, node.Name)
+			}
+			if team.Repositories.PageInfo.HasNextPage {
+				names, err = api.RepositoriesFor(team.Slug, ctx)
+				if err != nil {
+					return nil, err
+				}
+			}
+			for _, name := range names {
+				// Nais filters by substring; ownership requires the full identity.
+				if strings.EqualFold(name, repository) && !slices.Contains(teams, team.Slug) {
+					teams = append(teams, team.Slug)
+					break
+				}
+			}
+		}
+		if !resp.Data.Teams.PageInfo.HasNextPage {
+			return teams, nil
+		}
+		if resp.Data.Teams.PageInfo.EndCursor == "" || resp.Data.Teams.PageInfo.EndCursor == cursor {
+			return nil, errors.New("nais team pagination did not advance")
+		}
+		cursor = resp.Data.Teams.PageInfo.EndCursor
+	}
+}
+
+type pageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
+}
+
+type repositoryTeamsResponse struct {
+	Data struct {
+		Teams struct {
+			Nodes []struct {
+				Slug         string `json:"slug"`
+				Repositories struct {
+					Nodes []struct {
+						Name string `json:"name"`
+					} `json:"nodes"`
+					PageInfo pageInfo `json:"pageInfo"`
+				} `json:"repositories"`
+			} `json:"nodes"`
+			PageInfo pageInfo `json:"pageInfo"`
+		} `json:"teams"`
+	} `json:"data"`
 }
 
 func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string, error) {

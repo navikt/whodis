@@ -34,6 +34,7 @@ type repositoryGitHubClient interface {
 
 type repositoryNaisClient interface {
 	DetailsFor(string, context.Context) (*nais.TeamDetails, error)
+	TeamsForRepository(string, context.Context) ([]string, error)
 }
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +81,14 @@ func (repo *Repository) OwnerTeamsForRepo(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		handlePossible404(err, w, r)
 		return
+	}
+	if len(owners) == 0 {
+		owners, err = repo.NaisClient.TeamsForRepository(repository.String(), ctx)
+		if err != nil {
+			slog.Error("error getting owners from nais", slog.Any("error", err), slog.String("repo", repository.String()))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if err := json.NewEncoder(w).Encode(owners); err != nil {
@@ -132,21 +141,26 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	if len(teams) == 0 {
 		slog.Info("unable to find team in GitHub", slog.Any("repo", repository.String()))
 	}
-	var channels []string
-	for _, team := range teams {
-		naisTeamDetails, err := repo.NaisClient.DetailsFor(team, ctx)
+	channels, err := repo.slackChannelsForTeams(teams, ctx)
+	if err != nil {
+		slog.Error("error getting channels for repo", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if len(channels) == 0 {
+		slog.Info("unable to find slack channels from GitHub teams, trying nais repository ownership",
+			slog.String("repo", repository.String()))
+		naisTeams, err := repo.NaisClient.TeamsForRepository(repository.String(), ctx)
 		if err != nil {
-			// Dodgy error handling, thanks GraphQL
-			if strings.Contains(err.Error(), "specified team was not found") {
-				slog.Info("team was not found in nais", slog.Any("team", team))
-				continue
-			}
-			slog.Error("error getting channels for repo", slog.Any("error", err))
+			slog.Error("error getting repository teams from nais", slog.Any("error", err), slog.String("repo", repository.String()))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if !slices.Contains(channels, naisTeamDetails.SlackChannel) {
-			channels = append(channels, naisTeamDetails.SlackChannel)
+		channels, err = repo.slackChannelsForTeams(naisTeams, ctx)
+		if err != nil {
+			slog.Error("error getting channels for repo", slog.Any("error", err))
+			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 	}
 	if len(channels) == 0 {
@@ -168,6 +182,25 @@ func (repo *Repository) SlackChannelsForRepo(w http.ResponseWriter, r *http.Requ
 	if err := json.NewEncoder(w).Encode(channels); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (repo *Repository) slackChannelsForTeams(teams []string, ctx context.Context) ([]string, error) {
+	var channels []string
+	for _, team := range teams {
+		details, err := repo.NaisClient.DetailsFor(team, ctx)
+		if err != nil {
+			// Dodgy error handling, thanks GraphQL
+			if strings.Contains(err.Error(), "specified team was not found") {
+				slog.Info("team was not found in nais", slog.Any("team", team))
+				continue
+			}
+			return nil, err
+		}
+		if strings.TrimSpace(details.SlackChannel) != "" && !slices.Contains(channels, details.SlackChannel) {
+			channels = append(channels, details.SlackChannel)
+		}
+	}
+	return channels, nil
 }
 
 func (repo *Repository) allSlackChannelsForAllRepoAdminPeople(ctx context.Context, repository github.RepositoryID) ([]string, error) {
