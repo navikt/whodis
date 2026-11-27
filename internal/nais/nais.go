@@ -34,9 +34,20 @@ func (api *Api) DetailsFor(teamSlug string, ctx context.Context) (*TeamDetails, 
 	}
 	resp, err := httpsupport.MakeGqlQuery[teamQueryResponse](naisApiBaseUrl, token, query)
 	if err != nil {
-		return nil, err
+		return nil, asTeamNotFound(err)
+	}
+	if resp.Data.Team.Slug == "" {
+		return nil, ErrTeamNotFound
 	}
 	return resp.asTeam(), nil
+}
+
+func asTeamNotFound(err error) error {
+	var gqlErr *httpsupport.GqlError
+	if errors.As(err, &gqlErr) && strings.Contains(strings.ToLower(gqlErr.Message), "not found") {
+		return ErrTeamNotFound
+	}
+	return err
 }
 
 func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string, error) {
@@ -53,15 +64,11 @@ func (api *Api) RepositoriesFor(teamSlug string, ctx context.Context) ([]string,
 		query := buildRepoQuery(teamSlug, cursor)
 		resp, err := httpsupport.MakeGqlQuery[repoQueryResponse](naisApiBaseUrl, token, query)
 		if err != nil {
-			var gqlErr *httpsupport.GqlError
-			if errors.As(err, &gqlErr) && strings.Contains(strings.ToLower(gqlErr.Message), "not found") {
-				return nil, ErrTeamNotFound
-			}
-			return nil, err
+			return nil, asTeamNotFound(err)
 		}
 		teamData := resp.Data.Team
 		if teamData.Slug == "" {
-			return nil, nil
+			return nil, ErrTeamNotFound
 		}
 		for _, node := range teamData.Repositories.Nodes {
 			repos = append(repos, node.Name)
@@ -158,7 +165,7 @@ type teamQueryResponse struct {
 }
 
 func (tqr *teamQueryResponse) asTeam() *TeamDetails {
-	var members []TeamMember
+	members := []TeamMember{}
 	for _, member := range tqr.Data.Team.Members.Nodes {
 		members = append(members, TeamMember{
 			Email: member.User.Email,

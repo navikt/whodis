@@ -61,9 +61,9 @@ func TestRepositoryResolution(t *testing.T) {
 	}{
 		{"admin owners", "owners", []string{"admin"}, []string{"reader"}, nil, 200, []string{"admin"}, 0},
 		{"all teams fallback", "owners", nil, []string{"reader"}, nil, 200, []string{"reader"}, 1},
-		{"no owners", "owners", nil, nil, nil, 200, nil, 1},
+		{"no owners", "owners", nil, nil, nil, 200, []string{}, 1},
 		{"Slack channels", "slackchannels", nil, []string{"one", "two"}, nil, 200, []string{"#team"}, 1},
-		{"no Slack channels", "slackchannels", nil, nil, nil, 404, nil, 1},
+		{"no Slack channels", "slackchannels", nil, nil, nil, 200, []string{}, 1},
 		{"owners missing", "owners", nil, nil, &httpsupport.HttpError{Code: 404}, 404, nil, 0},
 		{"Slack repository missing", "slackchannels", nil, nil, &httpsupport.HttpError{Code: 404}, 404, nil, 1},
 	} {
@@ -88,15 +88,18 @@ func TestRepositoryResolution(t *testing.T) {
 					t.Fatalf("expected status %d, got %d: %s", tt.status, w.Code, w.Body.String())
 				}
 				if tt.status == http.StatusOK {
+					if got := w.Header().Get("Content-Type"); got != "application/json" {
+						t.Errorf("expected application/json, got %q", got)
+					}
 					var got []string
 					if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 						t.Fatal(err)
 					}
 					if !reflect.DeepEqual(got, tt.want) {
-						t.Errorf("expected %v, got %v", tt.want, got)
+						t.Errorf("expected %#v, got %#v", tt.want, got)
 					}
-				} else if w.Body.Len() != 0 {
-					t.Errorf("expected empty not-found response, got %s", w.Body.String())
+				} else {
+					assertProblem(t, w, tt.status, "repository_not_found")
 				}
 				if len(client.requests) == 0 {
 					t.Fatal("expected a GitHub lookup")
@@ -114,43 +117,20 @@ func TestRepositoryResolution(t *testing.T) {
 	}
 }
 
-func TestHandlePossible404(t *testing.T) {
+func TestHandleRepositoryLookupError(t *testing.T) {
 	tests := []struct {
 		name       string
 		err        error
 		wantStatus int
+		wantCode   string
 		wantLogs   int
 	}{
-		{
-			name:       "repository not found",
-			err:        &httpsupport.HttpError{Code: http.StatusNotFound},
-			wantStatus: http.StatusNotFound,
-			wantLogs:   1,
-		},
-		{
-			name:       "wrapped repository not found",
-			err:        fmt.Errorf("getting repository teams: %w", &httpsupport.HttpError{Code: http.StatusNotFound}),
-			wantStatus: http.StatusNotFound,
-			wantLogs:   1,
-		},
-		{
-			name:       "GitHub forbidden",
-			err:        &httpsupport.HttpError{Code: http.StatusForbidden},
-			wantStatus: http.StatusInternalServerError,
-			wantLogs:   2,
-		},
-		{
-			name:       "GitHub server error",
-			err:        &httpsupport.HttpError{Code: http.StatusInternalServerError},
-			wantStatus: http.StatusInternalServerError,
-			wantLogs:   2,
-		},
-		{
-			name:       "unexpected error",
-			err:        errors.New("connection failed"),
-			wantStatus: http.StatusInternalServerError,
-			wantLogs:   2,
-		},
+		{"repository not found", &httpsupport.HttpError{Code: http.StatusNotFound}, http.StatusNotFound, "repository_not_found", 1},
+		{"wrapped repository not found", fmt.Errorf("getting repository teams: %w", &httpsupport.HttpError{Code: http.StatusNotFound}), http.StatusNotFound, "repository_not_found", 1},
+		{"GitHub forbidden", &httpsupport.HttpError{Code: http.StatusForbidden}, http.StatusBadGateway, "upstream_error", 2},
+		{"GitHub server error", &httpsupport.HttpError{Code: http.StatusInternalServerError}, http.StatusBadGateway, "upstream_error", 2},
+		{"upstream timeout", fmt.Errorf("get teams: %w", context.DeadlineExceeded), http.StatusGatewayTimeout, "upstream_timeout", 2},
+		{"unexpected error", errors.New("broken invariant"), http.StatusInternalServerError, "internal_error", 2},
 	}
 
 	for _, tt := range tests {
@@ -165,44 +145,23 @@ func TestHandlePossible404(t *testing.T) {
 				Level:  slog.LevelInfo,
 				Schema: httplog.SchemaOTEL,
 			})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				handlePossible404(tt.err, w, r)
+				handleRepositoryLookupError(tt.err, w, r)
 			}))
-			req := httptest.NewRequest(http.MethodGet, "/repository/deleted-repo/owners", nil)
+			req := httptest.NewRequest(http.MethodGet, "/repository/navikt/deleted-repo/owners", nil)
 			w := httptest.NewRecorder()
 
 			handler.ServeHTTP(w, req)
 
-			if w.Code != tt.wantStatus {
-				t.Errorf("expected status %d, got %d", tt.wantStatus, w.Code)
-			}
+			assertProblem(t, w, tt.wantStatus, tt.wantCode)
 			lines := strings.Split(strings.TrimSpace(logs.String()), "\n")
 			if len(lines) != tt.wantLogs {
 				t.Errorf("expected %d log entries, got %d: %s", tt.wantLogs, len(lines), logs.String())
 			}
-			if !strings.Contains(logs.String(), fmt.Sprintf("GET /repository/deleted-repo/owners => HTTP %d", tt.wantStatus)) {
-				t.Errorf("expected request log with repository path and status %d: %s", tt.wantStatus, logs.String())
+			if tt.wantLogs > 1 && !strings.Contains(logs.String(), tt.err.Error()) {
+				t.Errorf("expected underlying error to be logged: %s", logs.String())
 			}
-			if tt.wantStatus == http.StatusInternalServerError && !strings.Contains(logs.String(), tt.err.Error()) {
-				t.Errorf("expected unexpected error to be logged: %s", logs.String())
-			}
-			if tt.wantStatus == http.StatusNotFound {
-				if w.Body.Len() != 0 {
-					t.Errorf("expected empty not-found response, got %q", w.Body.String())
-				}
-				if got := w.Header().Get("Content-Type"); got == "application/problem+json" {
-					t.Errorf("unexpected problem details content type on empty response")
-				}
-				var entry struct {
-					Code string `json:"error.code"`
-				}
-				if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
-					t.Fatal(err)
-				}
-				if entry.Code != "resource_not_found" {
-					t.Errorf("expected log code resource_not_found, got %q", entry.Code)
-				}
-			} else if strings.Contains(logs.String(), `"error.code"`) {
-				t.Errorf("unexpected not-found classification for server error: %s", logs.String())
+			if !strings.Contains(logs.String(), `"error.code":"`+tt.wantCode+`"`) {
+				t.Errorf("expected request log with error.code %s: %s", tt.wantCode, logs.String())
 			}
 		})
 	}
