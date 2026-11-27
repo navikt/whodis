@@ -136,6 +136,23 @@ When GitHub cannot find a repository or it is not accessible to whodis, both rep
 
 The existing request log records `error.code` as `route_not_found` for unmatched paths or `resource_not_found` for GitHub repository-not-found responses, without a separate handler error log. Other not-found responses, such as a missing NAIS team or Slack channel, retain their existing behavior.
 
+## Caching
+
+Responses are built from upstream lookups that are cached in memory, so changes in GitHub, Nais Console or Teamkatalogen can take a while to show up. Each pod keeps its own cache, so two replicas may briefly disagree.
+
+| Upstream lookup | Cached for | "Not found" or empty result cached for |
+|---|---|---|
+| GitHub teams with access to a repository | 15 min | 2 min |
+| GitHub repositories a team has access to | 15 min | 2 min |
+| Nais team details | 15 min | 2 min |
+| Nais repositories of a team | 15 min | 2 min |
+| Nais teams connected to a repository | 30 min | 2 min |
+| Teamkatalogen membership by email | 30 min | empty memberships: 30 min; HTTP errors: not cached |
+
+Concurrent identical lookups share one upstream request. Upstream failures (such as HTTP 5xx) are never cached. GitHub org users are loaded separately every 12 hours.
+
+Cache behaviour is exposed on `/internal/metrics`: `whodis_cache_requests_total` (by `cache` and `result`: `hit`, `negative_hit`, `miss`), `whodis_cache_loads_total`, `whodis_cache_evictions_total` and `whodis_cache_entries`. Misses minus loads is the number of lookups that were coalesced into another request's load.
+
 ## Development
 
 **Prerequisites:** Go 1.26+ (or use [mise](https://mise.jdx.dev/) — `mise install` will set up the correct version).

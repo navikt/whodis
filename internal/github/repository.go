@@ -18,7 +18,7 @@ func NewRepositoryID(owner, name string) (RepositoryID, error) {
 		return RepositoryID{}, errors.New("only the navikt organization is supported")
 	}
 	if !repositoryNamePattern.MatchString(name) || name == "." || name == ".." {
-		return RepositoryID{}, errors.New("repository name must contain 1 to 100 ASCII letters, digits, dots, underscores or hyphens, and cannot be . or ..")
+		return RepositoryID{}, errors.New("repository name must contain 1 to 100 ASCII letters, digits, dots, underscores or hyphens, and cannot be \".\" or \"..\"")
 	}
 	return RepositoryID{owner: "navikt", name: name}, nil
 }

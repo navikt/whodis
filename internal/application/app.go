@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/navikt/whodis/internal/cache"
 	"github.com/navikt/whodis/internal/github"
 	"github.com/navikt/whodis/internal/nais"
+	"github.com/navikt/whodis/internal/teamkatalogen"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,6 +24,7 @@ type App struct {
 	router   http.Handler
 	ghClient *github.Client
 	nais     *nais.Api
+	catalog  *teamkatalogen.Client
 	tracer   trace.Tracer
 }
 
@@ -53,10 +57,25 @@ func New() (*App, error) {
 	app := &App{
 		ghClient: gh,
 		nais:     naisClient,
+		catalog:  teamkatalogen.New(),
 		tracer:   tracer,
 	}
 	app.loadRoutes()
 	return app, nil
+}
+
+func (a *App) cacheStats() map[string]cache.Stats {
+	stats := make(map[string]cache.Stats)
+	if a.ghClient != nil {
+		maps.Copy(stats, a.ghClient.CacheStats())
+	}
+	if a.nais != nil {
+		maps.Copy(stats, a.nais.CacheStats())
+	}
+	if a.catalog != nil {
+		maps.Copy(stats, a.catalog.CacheStats())
+	}
+	return stats
 }
 
 func (a *App) Start(ctx context.Context) error {

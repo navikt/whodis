@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/httplog/v3"
@@ -24,12 +26,13 @@ import (
 type repositoryGitHubStub struct {
 	admins   []string
 	teams    []string
+	emails   map[string]string
 	err      error
 	requests []string
 	allCalls int
 }
 
-func (c *repositoryGitHubStub) EmailFor(string) string { return "" }
+func (c *repositoryGitHubStub) EmailFor(user string) string { return c.emails[user] }
 
 func (c *repositoryGitHubStub) AdminTeamsFor(repository github.RepositoryID, _ context.Context) ([]string, error) {
 	c.requests = append(c.requests, repository.String())
@@ -457,5 +460,76 @@ func TestSlackChannelsMayBeSpaceSeparated(t *testing.T) {
 	actual := extractUniqueSlackChannels(fromTeamkatalogen)
 	if !reflect.DeepEqual(expected, actual) {
 		t.Errorf("expected: %v, actual: %v", expected, actual)
+	}
+}
+
+type repositoryTeamkatalogenStub struct {
+	teams  map[string][]teamkatalogen.Team
+	err    error
+	mu     sync.Mutex
+	emails []string
+}
+
+func (c *repositoryTeamkatalogenStub) DetailsForUser(email string, _ context.Context) (*teamkatalogen.UserDetails, error) {
+	c.mu.Lock()
+	c.emails = append(c.emails, email)
+	c.mu.Unlock()
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &teamkatalogen.UserDetails{Teams: c.teams[email]}, nil
+}
+
+func TestSlackChannelsFromTeamkatalogenViaInjectedClient(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		err    error
+		status int
+		want   []string
+	}{
+		{"channels from admins' teams", nil, http.StatusOK, []string{"#one", "#two", "#shared"}},
+		{"Teamkatalogen failure", errors.New("unavailable"), http.StatusInternalServerError, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			catalog := &repositoryTeamkatalogenStub{
+				err: tt.err,
+				teams: map[string][]teamkatalogen.Team{
+					"ola@nav.no":  {{SlackChannel: "#one, #shared"}},
+					"kari@nav.no": {{SlackChannel: "#two #shared"}},
+				},
+			}
+			handler := &Repository{
+				GitHubClient: &repositoryGitHubStub{
+					admins: []string{"ola", "kari"},
+					emails: map[string]string{"ola": "ola@nav.no", "kari": "kari@nav.no"},
+				},
+				NaisClient:          repositoryNaisStub{},
+				TeamkatalogenClient: catalog,
+				Tracer:              noop.NewTracerProvider().Tracer("test"),
+			}
+			request := httptest.NewRequest(http.MethodGet, "/repository/navikt/dp-meldekort/slackchannels", nil)
+			request.SetPathValue("owner", "navikt")
+			request.SetPathValue("repoName", "dp-meldekort")
+			w := httptest.NewRecorder()
+			handler.SlackChannelsForRepo(w, request)
+
+			if w.Code != tt.status {
+				t.Fatalf("expected status %d, got %d: %s", tt.status, w.Code, w.Body.String())
+			}
+			if tt.status == http.StatusOK {
+				var got []string
+				if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+					t.Fatal(err)
+				}
+				slices.Sort(got)
+				slices.Sort(tt.want)
+				if !reflect.DeepEqual(got, tt.want) {
+					t.Errorf("expected %v, got %v", tt.want, got)
+				}
+			}
+			if len(catalog.emails) != 2 {
+				t.Errorf("expected a lookup per admin, got %v", catalog.emails)
+			}
+		})
 	}
 }

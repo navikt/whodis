@@ -9,6 +9,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/navikt/whodis/internal/nais"
+	"github.com/navikt/whodis/internal/teamkatalogen"
 )
 
 func TestRepositoryRoutesRejectInvalidIdentities(t *testing.T) {
@@ -143,5 +146,24 @@ func TestEnvVarsArePutInTheCorrectConfigProp(t *testing.T) {
 	}
 	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Env vars end up in the wrong config prop: %v", actual)
+	}
+}
+
+func TestMetricsEndpointReportsCacheStats(t *testing.T) {
+	previousLogger := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+	app := &App{nais: nais.New("unused"), catalog: teamkatalogen.New()}
+	app.loadRoutes()
+
+	w := httptest.NewRecorder()
+	app.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/internal/metrics", nil))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	for _, name := range []string{"nais_team_details", "nais_repository_teams", "nais_team_repositories", "teamkatalogen_user_details"} {
+		if !strings.Contains(w.Body.String(), `whodis_cache_entries{cache="`+name+`"} 0`) {
+			t.Errorf("missing cache_entries metric for %s", name)
+		}
 	}
 }

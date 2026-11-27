@@ -21,9 +21,10 @@ import (
 )
 
 type Repository struct {
-	GitHubClient repositoryGitHubClient
-	NaisClient   repositoryNaisClient
-	Tracer       trace.Tracer
+	GitHubClient        repositoryGitHubClient
+	NaisClient          repositoryNaisClient
+	TeamkatalogenClient repositoryTeamkatalogenClient
+	Tracer              trace.Tracer
 }
 
 type repositoryGitHubClient interface {
@@ -35,6 +36,10 @@ type repositoryGitHubClient interface {
 type repositoryNaisClient interface {
 	DetailsFor(string, context.Context) (*nais.TeamDetails, error)
 	TeamsForRepository(string, context.Context) ([]string, error)
+}
+
+type repositoryTeamkatalogenClient interface {
+	DetailsForUser(string, context.Context) (*teamkatalogen.UserDetails, error)
 }
 
 func (repo *Repository) EmailForGitHubUser(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +218,7 @@ func (repo *Repository) allSlackChannelsForAllRepoAdminPeople(ctx context.Contex
 	var mu sync.Mutex
 	for _, admin := range repoAdmins {
 		eg.Go(func() error {
-			teamkatalogenReponse, err := teamkatalogen.DetailsForUser(repo.GitHubClient.EmailFor(admin), ctx)
+			teamkatalogenReponse, err := repo.TeamkatalogenClient.DetailsForUser(repo.GitHubClient.EmailFor(admin), ctx)
 			if err != nil {
 				return err
 			}
